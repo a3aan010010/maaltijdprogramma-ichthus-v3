@@ -74,5 +74,10 @@
   }
  ],
  "volgende_id": 18,
- "verbruik": {}
+ "verbruik": {
+  "1324": {
+   "naam": "Hans Anders",
+   "drank": {}
+  }
+ }
 }

@@ -36,7 +36,7 @@ Gebouwd met hulp van Claude Code (Anthropic).
 - **Drankjes:** zelf drankjes toevoegen, prijzen wijzigen en drankjes verwijderen, op een aparte pagina.
 - **Totalen:** overzicht van de avond (aantal eters en alle soosrekeningen), op een aparte pagina zodat niet iedereen aan de bar alles ziet.
 - **Excel-export:** twee losse bestanden, `Maaltijd <datum>.xlsx` en `Soos <datum>.xlsx`.
-- **Archief:** bij "Nieuwe maaltijd" of "Nieuwe soos" wordt alles eerst geëxporteerd en bewaard.
+- **Archief:** bij "Nieuwe maaltijd" of "Nieuwe soos" wordt vanzelf (zonder melding) een kopie van de gegevens bewaard. Daarnaast wordt standaard een Excel gemaakt; dat kun je in het bevestigingsvenster uitzetten met het vinkje "Excel aanmaken".
 - **Datum:** standaard automatisch vandaag, en los aan te passen.
 - **Tegelijk werken:** maaltijd en soos kunnen tegelijk gebruikt worden, ook op meerdere computers.
 
@@ -90,7 +90,7 @@ Bovenin staat de balk met **Maaltijd**, **Soos** en **Instellingen**. Instelling
 In de lijst rechts: selecteer een naam en gebruik **+1**, **-1** of **Verwijderen**.
 
 - **Exporteer lijst naar Excel:** maakt of vervangt `Maaltijd <datum>.xlsx`.
-- **Nieuwe maaltijd:** exporteert, bewaart een kopie in het archief en maakt de lijst leeg. De soos blijft staan.
+- **Nieuwe maaltijd:** bewaart stil een kopie in het archief en maakt de lijst leeg. De soos blijft staan. In het bevestigingsvenster staat het vinkje **Excel aanmaken** standaard aan: dan wordt eerst `Maaltijd <datum>.xlsx` gemaakt (lukt dat niet, dan wordt er niets gewist). Zet je het vinkje uit, dan blijft het bij de back-up.
 
 ### Soos
 
@@ -110,7 +110,7 @@ Zolang er geen lid gekozen is, zijn de knoppen grijs. Min is ook grijs bij 0, wa
 Je ziet alleen de rekening van het gekozen lid.
 
 - **Exporteer lijst naar Excel:** maakt of vervangt `Soos <datum>.xlsx`.
-- **Nieuwe soos:** exporteert, archiveert en maakt de rekeningen leeg. De drankjes en de maaltijd blijven staan.
+- **Nieuwe soos:** bewaart stil een kopie in het archief en maakt de rekeningen leeg. De drankjes en de maaltijd blijven staan. Ook hier staat het vinkje **Excel aanmaken** standaard aan: dan wordt eerst `Soos <datum>.xlsx` gemaakt. Zet je het uit, dan blijft het bij de back-up.
 
 ### Instellingen > Drankjes en prijzen
 

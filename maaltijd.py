@@ -992,6 +992,56 @@ def guarded(method):
     return wrapper
 
 
+class YesNoDialog(tk.Toplevel):
+    """
+    Ja/nee-vraag met Nederlandse knoppen. De standaard tkinter-vraag (messagebox.askyesno)
+    krijgt zijn knopteksten van Windows en toont dus "Yes" en "No" als Windows op Engels
+    staat; daarom hebben we een eigen venster.
+
+    De knop Nee heeft de focus, zodat Enter uit gewoonte nooit iets wist of aanmeldt.
+    Escape of het kruisje betekent ook Nee. Na afloop staat in `result` True (ja) of False (nee).
+    Gebruik liever de functie ask_yes_no hieronder.
+    """
+
+    def __init__(self, parent, title, text):
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.transient(parent)
+        self.result = False
+        frame = ttk.Frame(self, padding=18)
+        frame.pack()
+        ttk.Label(frame, text=text, justify="left", wraplength=420).pack(anchor="w")
+        buttons = ttk.Frame(frame)
+        buttons.pack(anchor="e", pady=(16, 0))
+        self.no_button = ttk.Button(buttons, text="Nee", style="Big.TButton", command=self.destroy)
+        self.no_button.pack(side="right", padx=(8, 0))
+        ttk.Button(buttons, text="Ja", style="Big.TButton", command=self._yes).pack(side="right")
+        # Enter drukt op de knop die nu de focus heeft (Tab wisselt tussen Ja en Nee).
+        self.bind("<Return>", lambda e: self.focus_get().invoke() if isinstance(self.focus_get(), ttk.Button) else None)
+        self.bind("<Escape>", lambda e: self.destroy())
+        # Krijgt het venster zelf de focus (bijv. doordat Windows het naar voren haalt),
+        # zet die dan terug op Nee, zodat Enter nooit per ongeluk Ja betekent.
+        self.bind("<FocusIn>", lambda e: self.no_button.focus_set() if e.widget is self else None)
+        # Midden boven het hoofdvenster zetten.
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
+        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
+        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        self.grab_set()  # zolang dit venster open is, kan er niets anders worden aangeklikt
+        self.no_button.focus_set()
+        self.wait_window()  # wacht hier tot het venster dicht is
+
+    def _yes(self):
+        self.result = True
+        self.destroy()
+
+
+def ask_yes_no(title, message, parent):
+    """Stelt een ja/nee-vraag met Nederlandse knoppen. True = Ja, False = Nee."""
+    return YesNoDialog(parent.winfo_toplevel(), title, message).result
+
+
 # ---------------------------------------------------------------------------
 # 7. Schermen
 #
@@ -1256,6 +1306,49 @@ class DatumField(ttk.Frame):
         self.on_change()
 
 
+class NewListDialog(tk.Toplevel):
+    """
+    Bevestigingsvenster voor "Nieuwe maaltijd" en "Nieuwe soos", met een vinkje
+    "Excel aanmaken" dat standaard aan staat.
+
+    Na afloop staat in `result`:
+        None   als er is geannuleerd
+        True   als er doorgegaan wordt met een Excel (vinkje aan)
+        False  als er doorgegaan wordt zonder Excel (vinkje uit)
+    Gebruik: NewListDialog(parent, titel, tekst, knoptekst).result
+    """
+
+    def __init__(self, parent, title, text, ok_text):
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.transient(parent)
+        self.result = None
+        frame = ttk.Frame(self, padding=18)
+        frame.pack()
+        ttk.Label(frame, text=text, justify="left", wraplength=420).pack(anchor="w")
+        # Standaard aan: er wordt eerst een Excel gemaakt (en gaat er niets leeg als dat
+        # mislukt). Haal je het vinkje weg, dan blijft het bij de stille back-up.
+        self.make_excel = tk.BooleanVar(value=True)
+        ttk.Checkbutton(frame, text="Excel aanmaken", variable=self.make_excel).pack(anchor="w", pady=(14, 14))
+        buttons = ttk.Frame(frame)
+        buttons.pack(anchor="e")
+        ttk.Button(buttons, text="Annuleren", command=self.destroy).pack(side="right", padx=(6, 0))
+        ttk.Button(buttons, text=ok_text, style="Big.TButton", command=self._ok).pack(side="right")
+        self.bind("<Escape>", lambda e: self.destroy())
+        # Midden boven het hoofdvenster zetten.
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
+        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
+        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        self.grab_set()  # zolang dit venster open is, kan er niets anders worden aangeklikt
+        self.wait_window()  # wacht hier tot het venster dicht is
+
+    def _ok(self):
+        self.result = self.make_excel.get()
+        self.destroy()
+
+
 class MaaltijdPage(BasePage):
     """
     Pagina "Maaltijd": leden aanmelden voor de maaltijd.
@@ -1354,7 +1447,7 @@ class MaaltijdPage(BasePage):
         zo voorkomen we dubbele aanmeldingen door een keer te vaak op Enter drukken.
         """
         current = self.app.meal_store().read()["aanmeldingen"].get(member.nr)
-        if current and not messagebox.askyesno(
+        if current and not ask_yes_no(
             "Al aangemeld",
             f"{member.naam} staat al op de lijst ({current['aantal']}x).\n\nNog een keer aanmelden (bijvoorbeeld voor een gast)?",
             parent=self,
@@ -1401,7 +1494,7 @@ class MaaltijdPage(BasePage):
         if nr is None:
             return
         naam = self.tree.item(nr, "values")[1]
-        if not messagebox.askyesno("Verwijderen", f"{naam} helemaal van de lijst verwijderen?", parent=self):
+        if not ask_yes_no("Verwijderen", f"{naam} helemaal van de lijst verwijderen?", parent=self):
             return
         self.app.meal_store().update(lambda data: data["aanmeldingen"].pop(nr, None))
         self.message(f"{naam} is verwijderd.")
@@ -1422,22 +1515,28 @@ class MaaltijdPage(BasePage):
     @guarded
     def new_meal(self):
         """
-        Knop Nieuwe maaltijd: exporteren, archiveren en leegmaken, in die volgorde.
-        Gaat de export mis (bijv. bestand open in Excel), dan stopt alles via een
-        StoreError voordat er iets gewist wordt.
+        Knop Nieuwe maaltijd: stille back-up van maaltijd.json in het archief, daarna leegmaken.
+        In het bevestigingsvenster staat het vinkje "Excel aanmaken" standaard aan: dan wordt
+        eerst 'Maaltijd <datum>.xlsx' gemaakt; mislukt dat (bijv. bestand open in Excel), dan
+        stopt alles via een StoreError voordat er iets gewist wordt. Haal je het vinkje weg,
+        dan blijft het bij de stille back-up.
+        De back-up is een kopie van het JSON-bestand (zie App._archive) en is terug te
+        zetten door hem terug te kopieren.
         """
-        if not messagebox.askyesno(
+        dialog = NewListDialog(
+            self.app.root,
             "Nieuwe maaltijd",
-            "De maaltijdlijst wordt eerst geexporteerd naar Excel en bewaard in het archief. "
-            "Daarna begint de lijst leeg. De soos blijft zoals die is.\n\nDoorgaan?",
-            parent=self,
-        ):
+            "De maaltijdlijst wordt leeggemaakt. Een kopie blijft bewaard in het archief. "
+            "De soos blijft zoals die is.",
+            "Nieuwe maaltijd starten",
+        )
+        if dialog.result is None:
             return
-        path = self.app.export_meal()  # mislukt de export, dan wordt er niets gewist
+        path = self.app.export_meal() if dialog.result else None
         self.app.archive_and_reset_meal()
         self.refresh()
-        self.message("Nieuwe maaltijd gestart.")
-        messagebox.showinfo("Klaar", f"De vorige maaltijd is geexporteerd:\n{path}", parent=self)
+        text = "Nieuwe maaltijd gestart. Een kopie van de vorige staat in het archief."
+        self.message(text if path is None else f"{text} Excel opgeslagen als {os.path.basename(path)}.")
 
 
 class SoosPage(BasePage):
@@ -1705,22 +1804,26 @@ class SoosPage(BasePage):
     @guarded
     def new_soos(self):
         """
-        Knop Nieuwe soos: exporteren, archiveren en de rekeningen leegmaken.
+        Knop Nieuwe soos: stille back-up van soos.json in het archief, daarna de rekeningen leegmaken.
+        Werkt net als new_meal: het vinkje "Excel aanmaken" staat standaard aan, dan wordt eerst
+        'Soos <datum>.xlsx' gemaakt; haal je het weg, dan blijft het bij de stille back-up.
         De drankjes en prijzen blijven staan, de maaltijd wordt niet aangeraakt.
         """
-        if not messagebox.askyesno(
+        dialog = NewListDialog(
+            self.app.root,
             "Nieuwe soos",
-            "De soos-rekeningen worden eerst geexporteerd naar Excel en bewaard in het archief. "
-            "Daarna beginnen ze leeg (de drankjes blijven staan). De maaltijdlijst blijft zoals die is.\n\nDoorgaan?",
-            parent=self,
-        ):
+            "De soos-rekeningen worden leeggemaakt. Een kopie blijft bewaard in het archief. "
+            "De drankjes en de maaltijdlijst blijven zoals ze zijn.",
+            "Nieuwe soos starten",
+        )
+        if dialog.result is None:
             return
-        path = self.app.export_soos()  # mislukt de export, dan wordt er niets gewist
+        path = self.app.export_soos() if dialog.result else None
         self.app.archive_and_reset_soos()
         self.current = None
         self._force_refresh()
-        self.message("Nieuwe soos gestart.")
-        messagebox.showinfo("Klaar", f"De vorige soos is geexporteerd:\n{path}", parent=self)
+        text = "Nieuwe soos gestart. Een kopie van de vorige staat in het archief."
+        self.message(text if path is None else f"{text} Excel opgeslagen als {os.path.basename(path)}.")
 
     @guarded
     def export(self):
@@ -1868,7 +1971,7 @@ class DrinksPage(BasePage):
             self.message(str(e), error=True)
             return
         soos = self.app.soos_store().read()
-        if any(e["drank"].get(drink_id) for e in soos["verbruik"].values()) and not messagebox.askyesno(
+        if any(e["drank"].get(drink_id) for e in soos["verbruik"].values()) and not ask_yes_no(
             "Prijs wijzigen",
             f"'{name}' is deze avond al geboekt. De nieuwe prijs geldt dan ook voor de al geboekte drankjes.\n\nDoorgaan?",
             parent=self,
@@ -1890,7 +1993,7 @@ class DrinksPage(BasePage):
         drink_id, name = self._selected()
         if drink_id is None:
             return
-        if not messagebox.askyesno("Drankje verwijderen", f"Drankje '{name}' verwijderen?", parent=self):
+        if not ask_yes_no("Drankje verwijderen", f"Drankje '{name}' verwijderen?", parent=self):
             return
         result = {}
 

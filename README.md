@@ -8,7 +8,7 @@ Programma voor Ichthus Utrecht om aanmeldingen voor de maaltijd en het drankverb
 | **Datum** | 30 oktober 2026 |
 | **Versie** | 1.0 |
 | **Taal** | Python 3, alleen standaard libraries |
-| **Bestand** | `maaltijd.py` (alles zit in dit ene bestand) |
+| **Bestand** | `maaltijd.py` |
 
 Gebouwd met hulp van Claude Code (Anthropic).
 

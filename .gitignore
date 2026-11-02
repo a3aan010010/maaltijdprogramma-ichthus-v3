@@ -8,6 +8,5 @@ maaltijd_data/*.json
 maaltijd_data/archief/
 maaltijd_data/*.xlsx
 maaltijd_data/*.lock
-
 # Local archives
 *.zip

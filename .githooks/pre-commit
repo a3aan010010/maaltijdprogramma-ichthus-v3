@@ -1,0 +1,8 @@
+#!/bin/sh
+# Draait de tests voor elke commit. Falen ze, dan wordt de commit geweigerd.
+# Eenmalig aanzetten per computer:  git config core.hooksPath .githooks
+python -m unittest discover -s tests -q || {
+    echo ""
+    echo "De tests falen, de commit is niet gemaakt. Los de fout op en probeer opnieuw."
+    exit 1
+}

@@ -9,6 +9,7 @@ Programma voor Ichthus Utrecht om aanmeldingen voor de maaltijd en het drankverb
 | **Versie** | 1.0 |
 | **Taal** | Python 3, alleen standaard libraries |
 | **Bestand** | `maaltijd.py` |
+| **Licentie** | Apache 2.0 (zie `LICENSE`) |
 
 Gebouwd met hulp van Claude Code (Anthropic).
 
@@ -139,6 +140,7 @@ Naast `maaltijd.py`:
 | Bestand | Inhoud |
 |---|---|
 | `maaltijd_config.json` | De instellingen (opslagmap, ledenbestand, schermvullend). |
+| `maaltijd_fout.log` | Details van onverwachte fouten. Ontstaat pas bij de eerste fout; handig om mee te sturen als je hulp vraagt. |
 | `ichthus-logo-gray-navbar.png` | Het logo in de navbar (216x40, al op maat). |
 | `ichthus-logo-gray.png` | Het grote logo. Wordt gebruikt als de navbar-versie ontbreekt. |
 
@@ -180,6 +182,7 @@ Synchronisatiediensten zoals OneDrive of Dropbox zijn minder geschikt: die kunne
 | "De gegevens zijn bezig bij een ander scherm" | Even wachten en opnieuw proberen. Blijft het, controleer dan of de netwerkmap bereikbaar is. |
 | Iemand staat niet in de zoeklijst | Staat die persoon in het ledenbestand? Klik daarna op Instellingen > Opslag en ledenlijst > Ledenlijst opnieuw inlezen. |
 | Een bestand `maaltijd.json.kapot-...` | Het gegevensbestand was beschadigd en is apart gezet; het programma is schoon verdergegaan. Kijk in het archief voor de laatste goede versie. |
+| "Onverwachte fout" | De gegevens zijn veilig. De details staan in `maaltijd_fout.log` naast `maaltijd.py`. |
 | Dubbelklikken op `maaltijd.py` doet niets | Start via de opdrachtprompt met `python maaltijd.py` om de foutmelding te zien. Meestal is Python niet (goed) geïnstalleerd. |
 
 ## Privacy
@@ -216,7 +219,8 @@ Alles staat in `maaltijd.py`, met uitgebreide uitleg in de code zelf. Lees eerst
 - **Datums als tekst `dd-mm-jjjj`.**
 - **Lidnummers zijn altijd tekst.**
 - **Fouten voor de gebruiker zijn `StoreError`** met een duidelijke Nederlandse tekst. Methodes achter een knop krijgen `@guarded`, dan verschijnt de fout als venstertje.
-- **Niets in het geheugen dat niet ook op schijf staat.** Pagina's lezen de bestanden elke 2 seconden opnieuw (`BasePage._poll`).
+- **Niets in het geheugen dat niet ook op schijf staat.** De pagina die in beeld is leest de bestanden elke 2 seconden opnieuw (`BasePage._poll`); een verborgen pagina leest pas weer als hij in beeld komt (`on_show`).
+- **Eigen vraagvensters erven van `ModalDialog`.** "Nieuwe ..."-knoppen gebruiken `BasePage.start_new_list`, exportknoppen `BasePage.show_export`.
 
 ### Een nieuwe pagina toevoegen
 
@@ -235,13 +239,24 @@ Voeg het toe in `meal_default()` of `soos_default()` en werk de beschrijving van
 
 ### Testen
 
-Er zijn geen externe testtools nodig. Een snelle controle of het bestand nog klopt:
+Er zijn geen externe testtools nodig. In de map `tests` staan tests voor alles wat geen scherm nodig heeft (geld, datum, Excel, ledenlijst, opslag). Draaien vanuit de map van het programma:
 
 ```
-python -m py_compile maaltijd.py
+python -m unittest discover -s tests -v
 ```
 
-Test daarna met een **verzonnen** ledenlijst en een aparte opslagmap (kies die bij Instellingen > Opslag en ledenlijst), zodat je de echte gegevens niet aanraakt. Loop minimaal langs: aanmelden, +1/-1/verwijderen, drankje toevoegen en boeken, prijs wijzigen, beide exports openen in Excel, Nieuwe maaltijd en Nieuwe soos.
+Gebruik in tests alleen verzonnen namen.
+
+**Tests verplicht maken.** Dat gebeurt op twee plekken:
+
+1. *Op je eigen computer, voor elke commit.* Eenmalig per computer (of per nieuwe clone):
+   ```
+   git config core.hooksPath .githooks
+   ```
+   Daarna draait `.githooks/pre-commit` de tests bij elke `git commit` en weigert de commit als ze falen. Overslaan kan met `git commit --no-verify`, dus dit is een vangnet, geen slot.
+2. *Op GitHub, voor `main`.* `.github/workflows/tests.yml` draait de tests bij elke push en pull request. Maak ze verplicht via **Settings > Rules > Rulesets > New branch ruleset**: target `main`, zet **Require a pull request before merging** en **Require status checks to pass** aan, en voeg de check `tests` toe. Daarna kan er alleen nog via een pull request met geslaagde tests iets op `main` komen.
+
+Test daarna ook met de hand, met een **verzonnen** ledenlijst en een aparte opslagmap (kies die bij Instellingen > Opslag en ledenlijst), zodat je de echte gegevens niet aanraakt. Loop minimaal langs: aanmelden, +1/-1/verwijderen, drankje toevoegen en boeken, prijs wijzigen, beide exports openen in Excel, Nieuwe maaltijd en Nieuwe soos.
 
 ## Wijzigingen
 

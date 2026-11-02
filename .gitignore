@@ -3,10 +3,10 @@ __pycache__/
 
 # Runtime configuration and generated data
 maaltijd_config.json
+maaltijd_fout.log
 maaltijd_data/*.json
 maaltijd_data/archief/
 maaltijd_data/*.xlsx
-!maaltijd_data/leden.xlsx
 maaltijd_data/*.lock
 
 # Local archives

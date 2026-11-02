@@ -1,0 +1,19 @@
+# Draait de tests bij elke push en elke pull request op GitHub.
+# Maak ze verplicht via Settings > Rules > Rulesets (zie README, "Testen").
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    # Windows, want daar draait het programma ook.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests draaien
+        run: python -m unittest discover -s tests -v

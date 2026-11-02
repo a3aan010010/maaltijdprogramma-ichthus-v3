@@ -7,7 +7,7 @@
   Datum        : 30 oktober 2026
   Versie       : 1.0
   Taal         : Python 3 (alleen standaard libraries)
-  Licentie     : vrij te gebruiken en aan te passen binnen de vereniging
+  Licentie     : Apache 2.0 (zie LICENSE)
 
   Gebouwd met hulp van Claude Code (Anthropic).
   Zie README.md voor installatie, gebruik en uitleg voor ontwikkelaars.
@@ -51,10 +51,11 @@ Hoe het in grote lijnen werkt (voor wie hieraan verder bouwt):
     Elke klik doet: slot pakken, bestand lezen, aanpassen, wegschrijven, slot los
     (zie JsonStore.update). Daardoor kunnen meerdere schermen of computers veilig
     tegelijk werken.
-  * Elke pagina leest elke 2 seconden het bestand opnieuw (BasePage._poll) en
-    tekent zich alleen opnieuw als er echt iets veranderd is.
+  * De pagina die in beeld is, leest elke 2 seconden het bestand opnieuw
+    (BasePage._poll) en tekent zich alleen opnieuw als er echt iets veranderd is.
   * Fouten die de gebruiker moet zien, zijn StoreError. De decorator @guarded
-    vangt die op en toont een venstertje in plaats van te crashen.
+    vangt die op en toont een venstertje in plaats van te crashen. Alle andere
+    (onverwachte) fouten komen met de volledige details in maaltijd_fout.log.
   * Geld wordt altijd in hele centen (int) opgeslagen, nooit als kommagetal,
     zodat er geen afrondfouten ontstaan.
 
@@ -74,6 +75,7 @@ import shutil
 import sys
 import time
 import tkinter as tk
+import traceback
 import zipfile
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from tkinter import filedialog, messagebox, ttk
@@ -88,6 +90,8 @@ from xml.sax.saxutils import escape
 # programma ze terugvindt, ook als de opslagmap zelf is verplaatst.
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(APP_DIR, "maaltijd_config.json")
+# Onverwachte fouten worden met alle details hierin bijgeschreven (zie App.log_error).
+LOG_PATH = os.path.join(APP_DIR, "maaltijd_fout.log")
 
 # Standaardinstellingen. Alles wat in maaltijd_config.json staat, overschrijft
 # deze waarden; ontbreekt een sleutel in dat bestand, dan geldt de waarde hier.
@@ -572,12 +576,13 @@ class FileLock:
     Dit werkt ook over een netwerkschijf, zodat twee computers op dezelfde map
     elkaar niet in de weg zitten.
 
-    timeout     : zoveel seconden wachten we maximaal op het slot.
+    timeout     : zoveel seconden wachten we maximaal op het slot. Het scherm
+                  reageert zolang niet, dus houd dit kort.
     stale_after : een slot dat ouder is dan dit, is van een gecrasht programma
                   en wordt opgeruimd. Een normale schrijfactie duurt milliseconden.
     """
 
-    def __init__(self, path, timeout=10.0, stale_after=30.0):
+    def __init__(self, path, timeout=3.0, stale_after=10.0):
         self.path, self.timeout, self.stale_after = path, timeout, stale_after
 
     def __enter__(self):
@@ -675,6 +680,10 @@ class JsonStore:
             try:
                 with open(tmp, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=1, ensure_ascii=False)
+                    # fsync: echt naar de schijf, niet alleen in het geheugen van Windows.
+                    # Zonder dit kan het bestand na een stroomstoring leeg zijn.
+                    f.flush()
+                    os.fsync(f.fileno())
                 os.replace(tmp, self.path)
             except OSError as e:
                 raise StoreError(f"De gegevens konden niet worden opgeslagen: {e}")
@@ -748,6 +757,14 @@ def set_manual_datum(datum):
         data["datum_handmatig"] = True
 
     return change
+
+
+def excel_nr(nr):
+    """
+    Lidnummer voor in een export: als getal als dat kan (dan sorteert Excel goed),
+    maar "007" of "A12" blijven tekst zodat er niets verloren gaat.
+    """
+    return int(nr) if nr.isdigit() and not nr.startswith("0") else nr
 
 
 def member_total_cents(soos, nr):
@@ -827,14 +844,28 @@ class App:
     def _unexpected_error(self, exc, val, tb):
         """
         Vangnet voor fouten die nergens anders zijn opgevangen. Omdat alles direct
-        op schijf staat, gaat er bij zo'n fout geen werk verloren. Wil je bij het
-        ontwikkelen de volledige foutmelding zien, zet hier tijdelijk:
-            import traceback; traceback.print_exception(exc, val, tb)
+        op schijf staat, gaat er bij zo'n fout geen werk verloren. De volledige
+        foutmelding staat daarna in maaltijd_fout.log (zie log_error).
         """
         if isinstance(val, StoreError):
             messagebox.showerror("Let op", str(val))
         else:
-            messagebox.showerror("Onverwachte fout", f"Er ging iets mis: {val}\n\nDe gegevens zijn veilig, probeer het nog eens.")
+            self.log_error(exc, val, tb)
+            messagebox.showerror(
+                "Onverwachte fout",
+                f"Er ging iets mis: {val}\n\nDe gegevens zijn veilig, probeer het nog eens.\n"
+                f"De details staan in {os.path.basename(LOG_PATH)}.",
+            )
+
+    @staticmethod
+    def log_error(exc, val, tb):
+        """Schrijft een fout met datum, tijd en alle details onderaan maaltijd_fout.log."""
+        try:
+            with open(LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(f"--- {datetime.datetime.now():%d-%m-%Y %H:%M:%S}\n")
+                f.write("".join(traceback.format_exception(exc, val, tb)))
+        except OSError:
+            pass  # loggen mag zelf nooit een nieuwe fout geven
 
     # -- instellingen en bestanden --
     @property
@@ -873,7 +904,10 @@ class App:
 
     def _export_path(self, prefix, datum):
         """Pad van een exportbestand, zonder tekens die Windows niet toestaat in de naam."""
-        os.makedirs(self.data_dir, exist_ok=True)
+        try:
+            os.makedirs(self.data_dir, exist_ok=True)
+        except OSError as e:
+            raise StoreError(f"De opslagmap kon niet worden aangemaakt: {e}")
         safe = re.sub(r'[<>:"/\\|?*]', "-", datum)
         return os.path.join(self.data_dir, f"{prefix} {safe}.xlsx")
 
@@ -886,9 +920,7 @@ class App:
         rows = [[(f"Maaltijd {datum}", STYLE_BOLD)], [], [(h, STYLE_BOLD) for h in ("Lidnummer", "Naam", "Aantal", "Aangemeld om")]]
         total = 0
         for nr, e in meal["aanmeldingen"].items():
-            # Lidnummers als getal als dat kan (dan sorteert Excel goed), maar
-            # "007" of "A12" blijven tekst zodat er niets verloren gaat.
-            rows.append([int(nr) if nr.isdigit() and not nr.startswith("0") else nr, e["naam"], e["aantal"], e.get("tijd", "")])
+            rows.append([excel_nr(nr), e["naam"], e["aantal"], e.get("tijd", "")])
             total += e["aantal"]
         rows += [[], [("Totaal", STYLE_BOLD), "", (total, STYLE_BOLD)]]
         path = self._export_path("Maaltijd", datum)
@@ -913,7 +945,7 @@ class App:
             grand += cents
             column_sums = [a + b for a, b in zip(column_sums, counts)]
             rows.append(
-                [int(nr) if nr.isdigit() and not nr.startswith("0") else nr, e["naam"]]
+                [excel_nr(nr), e["naam"]]
                 + [c or "" for c in counts]  # 0 tonen we als lege cel, dat leest rustiger
                 + [(cents / 100, STYLE_MONEY)]  # Excel wil euro's, wij rekenen in centen
             )
@@ -931,9 +963,13 @@ class App:
         """
         stamp = datetime.datetime.now().strftime("%H%M%S")
         folder = os.path.join(self.data_dir, "archief", f"{prefix} {datum}_{stamp}")
-        os.makedirs(folder, exist_ok=True)
-        if os.path.exists(store.path):
-            shutil.copy2(store.path, folder)
+        try:
+            os.makedirs(folder, exist_ok=True)
+            if os.path.exists(store.path):
+                shutil.copy2(store.path, folder)
+        except OSError as e:
+            # StoreError stopt "Nieuwe ..." voordat er iets gewist wordt.
+            raise StoreError(f"De kopie voor het archief kon niet worden gemaakt: {e}")
         return folder
 
     def archive_and_reset_meal(self):
@@ -964,7 +1000,7 @@ class App:
             messagebox.showerror("Ledenlijst", self.members_error)
             name = "instellingen"
         # Alle pagina's bestaan altijd; we laten er steeds een zien met pack().
-        # Verborgen pagina's blijven op de achtergrond verversen, dat is goedkoop.
+        # Verborgen pagina's lezen niets; on_show() haalt de nieuwste gegevens op.
         for page in self.pages.values():
             page.pack_forget()
         self.pages[name].pack(fill="both", expand=True)
@@ -992,7 +1028,40 @@ def guarded(method):
     return wrapper
 
 
-class YesNoDialog(tk.Toplevel):
+class ModalDialog(tk.Toplevel):
+    """
+    Basis voor een eigen vraagvenster: titel, tekst, midden boven het hoofdvenster,
+    en zolang het open is kan er niets anders worden aangeklikt.
+
+    Een kindklasse roept eerst super().__init__(parent, titel, tekst) aan, zet
+    daarna haar eigen knoppen in self.frame en roept tot slot self.run() aan.
+    Escape of het kruisje sluit het venster zonder iets te kiezen.
+    """
+
+    def __init__(self, parent, title, text):
+        super().__init__(parent)
+        self.title(title)
+        self.resizable(False, False)
+        self.transient(parent)
+        self.frame = ttk.Frame(self, padding=18)
+        self.frame.pack()
+        ttk.Label(self.frame, text=text, justify="left", wraplength=420).pack(anchor="w")
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def run(self, focus=None):
+        """Zet het venster op zijn plek, geeft `focus` de focus en wacht tot het dicht is."""
+        parent = self.master
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
+        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
+        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        self.grab_set()  # zolang dit venster open is, kan er niets anders worden aangeklikt
+        if focus is not None:
+            focus.focus_set()
+        self.wait_window()  # wacht hier tot het venster dicht is
+
+
+class YesNoDialog(ModalDialog):
     """
     Ja/nee-vraag met Nederlandse knoppen. De standaard tkinter-vraag (messagebox.askyesno)
     krijgt zijn knopteksten van Windows en toont dus "Yes" en "No" als Windows op Engels
@@ -1004,33 +1073,19 @@ class YesNoDialog(tk.Toplevel):
     """
 
     def __init__(self, parent, title, text):
-        super().__init__(parent)
-        self.title(title)
-        self.resizable(False, False)
-        self.transient(parent)
+        super().__init__(parent, title, text)
         self.result = False
-        frame = ttk.Frame(self, padding=18)
-        frame.pack()
-        ttk.Label(frame, text=text, justify="left", wraplength=420).pack(anchor="w")
-        buttons = ttk.Frame(frame)
+        buttons = ttk.Frame(self.frame)
         buttons.pack(anchor="e", pady=(16, 0))
         self.no_button = ttk.Button(buttons, text="Nee", style="Big.TButton", command=self.destroy)
         self.no_button.pack(side="right", padx=(8, 0))
         ttk.Button(buttons, text="Ja", style="Big.TButton", command=self._yes).pack(side="right")
         # Enter drukt op de knop die nu de focus heeft (Tab wisselt tussen Ja en Nee).
         self.bind("<Return>", lambda e: self.focus_get().invoke() if isinstance(self.focus_get(), ttk.Button) else None)
-        self.bind("<Escape>", lambda e: self.destroy())
         # Krijgt het venster zelf de focus (bijv. doordat Windows het naar voren haalt),
         # zet die dan terug op Nee, zodat Enter nooit per ongeluk Ja betekent.
         self.bind("<FocusIn>", lambda e: self.no_button.focus_set() if e.widget is self else None)
-        # Midden boven het hoofdvenster zetten.
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
-        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
-        self.grab_set()  # zolang dit venster open is, kan er niets anders worden aangeklikt
-        self.no_button.focus_set()
-        self.wait_window()  # wacht hier tot het venster dicht is
+        self.run(focus=self.no_button)
 
     def _yes(self):
         self.result = True
@@ -1110,19 +1165,19 @@ class MemberPicker(ttk.Frame):
         ttk.Label(self, text="Lidnummer of naam:").pack(anchor="w")
         self.entry = ttk.Entry(self, textvariable=self.var, font=("Segoe UI", 15))
         self.entry.pack(fill="x", pady=(2, 6))
-        self.entry.bind("<Return>", self._enter)
+        self.entry.bind("<Return>", self.submit)
         self.entry.bind("<Down>", self._to_list)
 
         # exportselection=False: anders verdwijnt de selectie zodra je ergens anders klikt.
         self.list = tk.Listbox(self, height=8, exportselection=False, font=("Segoe UI", 12))
         self.list.pack(fill="both", expand=True)
-        self.list.bind("<Return>", self._enter)
+        self.list.bind("<Return>", self.submit)
         if single_click:
             # Bij het LOSLATEN van de muisknop kiezen, niet bij pijltjestoetsen:
             # anders zou je met pijltje omlaag al een lid kiezen terwijl je nog zoekt.
             self.list.bind("<ButtonRelease-1>", self._click)
         else:
-            self.list.bind("<Double-Button-1>", self._enter)
+            self.list.bind("<Double-Button-1>", self.submit)
 
     def focus(self):
         """Zet de cursor in het zoekveld."""
@@ -1143,7 +1198,7 @@ class MemberPicker(ttk.Frame):
             self.list.selection_clear(0, "end")
             self.list.selection_set(0)
 
-    def _enter(self, _event=None):
+    def submit(self, _event=None):
         """
         Enter, dubbelklik of de knop Aanmelden. Kiest in deze volgorde:
           1. het lid dat in de lijst geselecteerd is
@@ -1194,16 +1249,17 @@ class BasePage(ttk.Frame):
     de gegevens en vergelijkt die met de vorige keer. Is er niets veranderd, dan
     stopt refresh() meteen. Zo flikkert het scherm niet en blijft een selectie
     in een lijst staan. Wil je het scherm hoe dan ook opnieuw tekenen (bijv. na
-    het kiezen van een ander lid), zet dan eerst self._sig = None.
+    het kiezen van een ander lid), roep dan self._force_refresh() aan.
     """
 
-    POLL_MS = 2000  # hoe vaak (in milliseconden) elke pagina de bestanden opnieuw leest
+    POLL_MS = 2000  # hoe vaak (in milliseconden) de zichtbare pagina de bestanden opnieuw leest
 
     def __init__(self, app, parent):
         super().__init__(parent)
         self.app = app
         self._sig = None  # zie de uitleg hierboven
         self._job = None  # id van de geplande volgende _poll, om te kunnen stoppen
+        self._last_poll_error = None  # zodat dezelfde fout niet elke 2 seconden in het log komt
         self.bind("<Destroy>", self._on_destroy)
         # Statusregel onderaan: groen voor "gelukt", rood voor "let op".
         # Dit is een gewone tk.Label (geen ttk), omdat we de kleur willen wisselen.
@@ -1233,14 +1289,27 @@ class BasePage(ttk.Frame):
         self._poll()
 
     def _poll(self):
-        """Leest elke paar seconden de gegevens opnieuw: zo zie je wijzigingen van het andere scherm."""
+        """
+        Leest elke paar seconden de gegevens opnieuw, zodat bijvoorbeeld de datum na
+        middernacht vanzelf meeloopt. Alleen de pagina die in beeld is leest echt;
+        een verborgen pagina wordt bijgewerkt zodra hij in beeld komt (on_show).
+        """
         try:
-            self.refresh()
+            if self.winfo_ismapped():
+                self.refresh()
+            self._last_poll_error = None
         except StoreError as e:
             # Hier geen venstertje: dat zou elke 2 seconden terugkomen.
             self.message(str(e), error=True)
         except tk.TclError:
             return  # het venster wordt afgesloten; stoppen met verversen
+        except Exception as e:
+            # Onverwachte fout: wel melden en loggen, maar gewoon door blijven verversen.
+            # Zonder deze regel zou de pagina na een fout nooit meer bijwerken.
+            if repr(e) != self._last_poll_error:
+                self._last_poll_error = repr(e)
+                self.app.log_error(*sys.exc_info())
+            self.message(f"Er ging iets mis bij het verversen. Zie {os.path.basename(LOG_PATH)}.", error=True)
         # after() plant de volgende keer in, zonder het programma te blokkeren.
         self._job = self.after(self.POLL_MS, self._poll)
 
@@ -1251,6 +1320,34 @@ class BasePage(ttk.Frame):
 
     def refresh(self):  # wordt door de kindklassen ingevuld
         raise NotImplementedError
+
+    def _force_refresh(self):
+        """Scherm hoe dan ook opnieuw tekenen (zie de uitleg over _sig hierboven)."""
+        self._sig = None
+        self.refresh()
+
+    def show_export(self, path):
+        """Meldt een geslaagde export, in de statusregel en in een venstertje."""
+        self.message("Export gelukt.")
+        messagebox.showinfo("Export gelukt", f"Het bestand is opgeslagen als:\n{path}", parent=self)
+
+    def start_new_list(self, title, text, export, archive_and_reset, done_text):
+        """
+        Gedeelde werkwijze van "Nieuwe maaltijd" en "Nieuwe soos". Geeft True als er
+        echt opnieuw begonnen is, False als er geannuleerd is.
+
+        Eerst het bevestigingsvenster met het vinkje "Excel aanmaken". Staat dat aan,
+        dan eerst export(); mislukt die (bijv. bestand open in Excel), dan stopt alles
+        via een StoreError voordat er iets gewist wordt. Daarna archive_and_reset():
+        een stille back-up in het archief (zie App._archive) en de lijst leegmaken.
+        """
+        dialog = NewListDialog(self.app.root, title, text, f"{title} starten")
+        if dialog.result is None:
+            return False
+        path = export() if dialog.result else None
+        archive_and_reset()
+        self.message(done_text if path is None else f"{done_text} Excel opgeslagen als {os.path.basename(path)}.")
+        return True
 
 
 class DatumField(ttk.Frame):
@@ -1306,7 +1403,7 @@ class DatumField(ttk.Frame):
         self.on_change()
 
 
-class NewListDialog(tk.Toplevel):
+class NewListDialog(ModalDialog):
     """
     Bevestigingsvenster voor "Nieuwe maaltijd" en "Nieuwe soos", met een vinkje
     "Excel aanmaken" dat standaard aan staat.
@@ -1319,30 +1416,17 @@ class NewListDialog(tk.Toplevel):
     """
 
     def __init__(self, parent, title, text, ok_text):
-        super().__init__(parent)
-        self.title(title)
-        self.resizable(False, False)
-        self.transient(parent)
+        super().__init__(parent, title, text)
         self.result = None
-        frame = ttk.Frame(self, padding=18)
-        frame.pack()
-        ttk.Label(frame, text=text, justify="left", wraplength=420).pack(anchor="w")
         # Standaard aan: er wordt eerst een Excel gemaakt (en gaat er niets leeg als dat
         # mislukt). Haal je het vinkje weg, dan blijft het bij de stille back-up.
         self.make_excel = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frame, text="Excel aanmaken", variable=self.make_excel).pack(anchor="w", pady=(14, 14))
-        buttons = ttk.Frame(frame)
+        ttk.Checkbutton(self.frame, text="Excel aanmaken", variable=self.make_excel).pack(anchor="w", pady=(14, 14))
+        buttons = ttk.Frame(self.frame)
         buttons.pack(anchor="e")
         ttk.Button(buttons, text="Annuleren", command=self.destroy).pack(side="right", padx=(6, 0))
         ttk.Button(buttons, text=ok_text, style="Big.TButton", command=self._ok).pack(side="right")
-        self.bind("<Escape>", lambda e: self.destroy())
-        # Midden boven het hoofdvenster zetten.
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
-        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
-        self.grab_set()  # zolang dit venster open is, kan er niets anders worden aangeklikt
-        self.wait_window()  # wacht hier tot het venster dicht is
+        self.run()
 
     def _ok(self):
         self.result = self.make_excel.get()
@@ -1385,7 +1469,7 @@ class MaaltijdPage(BasePage):
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         self.picker = MemberPicker(left, app, self.sign_up, self.message, single_click=True)
         self.picker.pack(fill="both", expand=True)
-        ttk.Button(left, text="Aanmelden", style="Big.TButton", command=self.picker._enter).pack(fill="x", pady=(8, 0))
+        ttk.Button(left, text="Aanmelden", style="Big.TButton", command=self.picker.submit).pack(fill="x", pady=(8, 0))
 
         # Rechts: de aanmeldlijst. Elke rij heeft als id (iid) het lidnummer,
         # zodat we de geselecteerde rij direct aan een lid kunnen koppelen.
@@ -1508,35 +1592,23 @@ class MaaltijdPage(BasePage):
     @guarded
     def export(self):
         """Knop Exporteer: schrijft 'Maaltijd <datum>.xlsx' in de opslagmap."""
-        path = self.app.export_meal()
-        self.message("Export gelukt.")
-        messagebox.showinfo("Export gelukt", f"Het bestand is opgeslagen als:\n{path}", parent=self)
+        self.show_export(self.app.export_meal())
 
     @guarded
     def new_meal(self):
         """
-        Knop Nieuwe maaltijd: stille back-up van maaltijd.json in het archief, daarna leegmaken.
-        In het bevestigingsvenster staat het vinkje "Excel aanmaken" standaard aan: dan wordt
-        eerst 'Maaltijd <datum>.xlsx' gemaakt; mislukt dat (bijv. bestand open in Excel), dan
-        stopt alles via een StoreError voordat er iets gewist wordt. Haal je het vinkje weg,
-        dan blijft het bij de stille back-up.
-        De back-up is een kopie van het JSON-bestand (zie App._archive) en is terug te
-        zetten door hem terug te kopieren.
+        Knop Nieuwe maaltijd: eventueel eerst 'Maaltijd <datum>.xlsx', dan een stille
+        back-up van maaltijd.json in het archief en de lijst leegmaken (zie start_new_list).
         """
-        dialog = NewListDialog(
-            self.app.root,
+        if self.start_new_list(
             "Nieuwe maaltijd",
             "De maaltijdlijst wordt leeggemaakt. Een kopie blijft bewaard in het archief. "
             "De soos blijft zoals die is.",
-            "Nieuwe maaltijd starten",
-        )
-        if dialog.result is None:
-            return
-        path = self.app.export_meal() if dialog.result else None
-        self.app.archive_and_reset_meal()
-        self.refresh()
-        text = "Nieuwe maaltijd gestart. Een kopie van de vorige staat in het archief."
-        self.message(text if path is None else f"{text} Excel opgeslagen als {os.path.basename(path)}.")
+            self.app.export_meal,
+            self.app.archive_and_reset_meal,
+            "Nieuwe maaltijd gestart. Een kopie van de vorige staat in het archief.",
+        ):
+            self.refresh()
 
 
 class SoosPage(BasePage):
@@ -1752,11 +1824,6 @@ class SoosPage(BasePage):
             # het hele scherm uit. Anders staat de naam ver van de knoppen af.
             entry["frame"].grid(row=index % per_column, column=index // per_column, sticky="w", padx=6)
 
-    def _force_refresh(self):
-        """Scherm hoe dan ook opnieuw tekenen (zie de uitleg over _sig in BasePage)."""
-        self._sig = None
-        self.refresh()
-
     # -- lid kiezen --
     def pick_member(self, member):
         """Wordt aangeroepen door de MemberPicker: dit lid wordt het 'huidige' lid."""
@@ -1804,33 +1871,25 @@ class SoosPage(BasePage):
     @guarded
     def new_soos(self):
         """
-        Knop Nieuwe soos: stille back-up van soos.json in het archief, daarna de rekeningen leegmaken.
-        Werkt net als new_meal: het vinkje "Excel aanmaken" staat standaard aan, dan wordt eerst
-        'Soos <datum>.xlsx' gemaakt; haal je het weg, dan blijft het bij de stille back-up.
+        Knop Nieuwe soos: eventueel eerst 'Soos <datum>.xlsx', dan een stille back-up van
+        soos.json in het archief en de rekeningen leegmaken (zie start_new_list).
         De drankjes en prijzen blijven staan, de maaltijd wordt niet aangeraakt.
         """
-        dialog = NewListDialog(
-            self.app.root,
+        if self.start_new_list(
             "Nieuwe soos",
             "De soos-rekeningen worden leeggemaakt. Een kopie blijft bewaard in het archief. "
             "De drankjes en de maaltijdlijst blijven zoals ze zijn.",
-            "Nieuwe soos starten",
-        )
-        if dialog.result is None:
-            return
-        path = self.app.export_soos() if dialog.result else None
-        self.app.archive_and_reset_soos()
-        self.current = None
-        self._force_refresh()
-        text = "Nieuwe soos gestart. Een kopie van de vorige staat in het archief."
-        self.message(text if path is None else f"{text} Excel opgeslagen als {os.path.basename(path)}.")
+            self.app.export_soos,
+            self.app.archive_and_reset_soos,
+            "Nieuwe soos gestart. Een kopie van de vorige staat in het archief.",
+        ):
+            self.current = None
+            self._force_refresh()
 
     @guarded
     def export(self):
         """Knop Exporteer: schrijft 'Soos <datum>.xlsx' in de opslagmap."""
-        path = self.app.export_soos()
-        self.message("Export gelukt.")
-        messagebox.showinfo("Export gelukt", f"Het bestand is opgeslagen als:\n{path}", parent=self)
+        self.show_export(self.app.export_soos())
 
 
 class DrinksPage(BasePage):
@@ -1914,11 +1973,6 @@ class DrinksPage(BasePage):
             self.message("Klik eerst op een drankje in de lijst.", error=True)
             return None, None
         return selected[0], self.tree.item(selected[0], "values")[0]
-
-    def _force_refresh(self):
-        """Scherm hoe dan ook opnieuw tekenen (zie de uitleg over _sig in BasePage)."""
-        self._sig = None
-        self.refresh()
 
     @guarded
     def add_drink(self):
@@ -2037,7 +2091,7 @@ class TotalsPage(BasePage):
         self.grand_var = tk.StringVar()
         ttk.Label(frame, textvariable=self.grand_var, font=("Segoe UI", 14, "bold")).pack(anchor="e", pady=(8, 0))
 
-        # Geen self.refresh() hier: start_polling() roept refresh() direct aan.
+        # Geen self.refresh() hier: deze pagina toont pas iets als hij in beeld komt (on_show).
         self.start_polling()
 
     def refresh(self):

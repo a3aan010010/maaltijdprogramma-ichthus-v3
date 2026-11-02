@@ -1,5 +1,5 @@
 """
-Tests voor de onderdelen van maaltijd.py die geen scherm nodig hebben:
+Tests voor de onderdelen van maaltijd_app die geen scherm nodig hebben:
 geld en datum, Excel lezen en schrijven, de ledenlijst en de opslag.
 
 Draaien vanuit de map van het programma:
@@ -8,60 +8,59 @@ Draaien vanuit de map van het programma:
 Alle namen hieronder zijn verzonnen. Gebruik in tests nooit echte leden.
 """
 
-import json
 import os
 import sys
 import tempfile
 import unittest
 
-# Zorgt dat "import maaltijd" werkt, ook als de tests vanuit een andere map starten.
+# Zorgt dat "import maaltijd_app" werkt, ook als de tests vanuit een andere map starten.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import maaltijd as m  # noqa: E402  (moet na de sys.path regel hierboven)
+from maaltijd_app import excel, hulpjes, instellingen, leden, opslag  # noqa: E402  (na de sys.path regel)
 
 
 class TestGeld(unittest.TestCase):
     def test_parse_prijs_komma_en_punt(self):
-        self.assertEqual(m.parse_prijs("1,50"), 150)
-        self.assertEqual(m.parse_prijs("1.50"), 150)
-        self.assertEqual(m.parse_prijs(" € 2 "), 200)
+        self.assertEqual(hulpjes.parse_prijs("1,50"), 150)
+        self.assertEqual(hulpjes.parse_prijs("1.50"), 150)
+        self.assertEqual(hulpjes.parse_prijs(" € 2 "), 200)
 
     def test_parse_prijs_rondt_af_op_centen(self):
-        self.assertEqual(m.parse_prijs("1,505"), 151)
-        self.assertEqual(m.parse_prijs("1,504"), 150)
+        self.assertEqual(hulpjes.parse_prijs("1,505"), 151)
+        self.assertEqual(hulpjes.parse_prijs("1,504"), 150)
 
     def test_parse_prijs_weigert_onzin(self):
         for tekst in ("", "abc", "-1", "nan", "inf", "150000"):
             with self.subTest(tekst=tekst):
                 with self.assertRaises(ValueError):
-                    m.parse_prijs(tekst)
+                    hulpjes.parse_prijs(tekst)
 
     def test_euro(self):
-        self.assertEqual(m.euro(150), "1,50")
-        self.assertEqual(m.euro(0), "0,00")
-        self.assertEqual(m.euro(5), "0,05")
-        self.assertEqual(m.euro(123456), "1.234,56")
-        self.assertEqual(m.euro(-5), "-0,05")
+        self.assertEqual(hulpjes.euro(150), "1,50")
+        self.assertEqual(hulpjes.euro(0), "0,00")
+        self.assertEqual(hulpjes.euro(5), "0,05")
+        self.assertEqual(hulpjes.euro(123456), "1.234,56")
+        self.assertEqual(hulpjes.euro(-5), "-0,05")
 
 
 class TestDatum(unittest.TestCase):
     def test_parse_datum(self):
-        self.assertEqual(m.parse_datum("30-10-2026"), "30-10-2026")
-        self.assertEqual(m.parse_datum(" 5/1/2026 "), "05-01-2026")
+        self.assertEqual(hulpjes.parse_datum("30-10-2026"), "30-10-2026")
+        self.assertEqual(hulpjes.parse_datum(" 5/1/2026 "), "05-01-2026")
 
     def test_parse_datum_weigert_niet_bestaande_datum(self):
         for tekst in ("31-02-2026", "2026-10-30", "morgen"):
             with self.subTest(tekst=tekst):
                 with self.assertRaises(ValueError):
-                    m.parse_datum(tekst)
+                    hulpjes.parse_datum(tekst)
 
     def test_auto_datum(self):
         data = {"datum": "01-01-2000", "datum_handmatig": False}
-        m.auto_datum(data)
-        self.assertEqual(data["datum"], m.today_str())
+        opslag.auto_datum(data)
+        self.assertEqual(data["datum"], hulpjes.today_str())
 
         data = {"datum": "01-01-2000", "datum_handmatig": True}
-        m.auto_datum(data)
+        opslag.auto_datum(data)
         self.assertEqual(data["datum"], "01-01-2000")
 
 
@@ -76,20 +75,20 @@ class TestExcel(unittest.TestCase):
     def test_kolomletters(self):
         for index, letters in ((0, "A"), (25, "Z"), (26, "AA"), (701, "ZZ"), (702, "AAA")):
             with self.subTest(letters=letters):
-                self.assertEqual(m._col_letter(index), letters)
-                self.assertEqual(m._col_index(letters + "1"), index)
+                self.assertEqual(excel._col_letter(index), letters)
+                self.assertEqual(excel._col_index(letters + "1"), index)
 
     def test_schrijven_en_teruglezen(self):
         rows = [
-            [("Kop", m.STYLE_BOLD)],
+            [("Kop", excel.STYLE_BOLD)],
             [],
             ["007", "A & B <c>", 12, 1.5],
             ["", "", "derde kolom"],
             ["stuur\x01code"],
         ]
-        m.write_xlsx(self.path, [("Blad", rows)])
+        excel.write_xlsx(self.path, [("Blad", rows)])
         self.assertEqual(
-            m.read_xlsx_rows(self.path),
+            excel.read_xlsx_rows(self.path),
             [["Kop"], ["007", "A & B <c>", "12", "1.5"], ["", "", "derde kolom"], ["stuurcode"]],
         )
         self.assertFalse(os.path.exists(self.path + ".tmp"))
@@ -97,8 +96,8 @@ class TestExcel(unittest.TestCase):
     def test_geen_xlsx(self):
         with open(self.path, "w") as f:
             f.write("dit is geen zip")
-        with self.assertRaises(m.StoreError):
-            m.read_xlsx_rows(self.path)
+        with self.assertRaises(instellingen.StoreError):
+            excel.read_xlsx_rows(self.path)
 
 
 class TestLeden(unittest.TestCase):
@@ -110,8 +109,8 @@ class TestLeden(unittest.TestCase):
         self.tmp.cleanup()
 
     def load(self, rows):
-        m.write_xlsx(self.path, [("Leden", rows)])
-        return [(x.nr, x.naam) for x in m.load_members(self.path)]
+        excel.write_xlsx(self.path, [("Leden", rows)])
+        return [(x.nr, x.naam) for x in leden.load_members(self.path)]
 
     def test_met_kopjes_voornaam_achternaam(self):
         rows = [["Lidnummer", "Voornaam", "Achternaam"], [1001, "Anna", "de Vries"], [1010, "Jelle", "Bos"]]
@@ -125,14 +124,14 @@ class TestLeden(unittest.TestCase):
         self.assertEqual(self.load(rows), [("007", "Anna de Vries"), ("A12", "Jelle Bos")])
 
     def test_ontbrekend_bestand(self):
-        with self.assertRaises(m.StoreError):
-            m.load_members(os.path.join(self.tmp.name, "bestaat-niet.xlsx"))
+        with self.assertRaises(instellingen.StoreError):
+            leden.load_members(os.path.join(self.tmp.name, "bestaat-niet.xlsx"))
 
     def test_zoeken(self):
-        leden = [m.Member("1001", "Anna de Vries"), m.Member("1010", "Jelle Bos"), m.Member("2001", "Bas Anders")]
+        lijst = [leden.Member("1001", "Anna de Vries"), leden.Member("1010", "Jelle Bos"), leden.Member("2001", "Bas Anders")]
 
         def namen(tekst):
-            return [x.naam for x in m.find_members(leden, tekst)]
+            return [x.naam for x in leden.find_members(lijst, tekst)]
 
         self.assertEqual(namen("1001"), ["Anna de Vries"])  # exact lidnummer
         self.assertEqual(namen("10"), ["Anna de Vries", "Jelle Bos"])  # begin van lidnummer
@@ -145,7 +144,7 @@ class TestOpslag(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = os.path.join(self.tmp.name, "soos.json")
-        self.store = m.JsonStore(self.path, m.soos_default, m.auto_datum)
+        self.store = opslag.JsonStore(self.path, opslag.soos_default, opslag.auto_datum)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -176,8 +175,8 @@ class TestOpslag(unittest.TestCase):
 
     def test_bezet_slot_geeft_nette_fout(self):
         open(self.path + ".lock", "w").close()  # een vers slot van "een ander scherm"
-        with self.assertRaises(m.StoreError):
-            with m.FileLock(self.path + ".lock", timeout=0.2):
+        with self.assertRaises(instellingen.StoreError):
+            with opslag.FileLock(self.path + ".lock", timeout=0.2):
                 pass
 
     def test_rekening(self):
@@ -185,13 +184,13 @@ class TestOpslag(unittest.TestCase):
             "drankjes": [{"id": 1, "naam": "Bier", "cent": 150}, {"id": 2, "naam": "Fris", "cent": 100}],
             "verbruik": {"1001": {"naam": "Anna de Vries", "drank": {"1": 3, "2": 1}}},
         }
-        self.assertEqual(m.member_total_cents(soos, "1001"), 550)
-        self.assertEqual(m.member_total_cents(soos, "9999"), 0)
+        self.assertEqual(opslag.member_total_cents(soos, "1001"), 550)
+        self.assertEqual(opslag.member_total_cents(soos, "9999"), 0)
 
     def test_excel_nr(self):
-        self.assertEqual(m.excel_nr("1001"), 1001)
-        self.assertEqual(m.excel_nr("007"), "007")
-        self.assertEqual(m.excel_nr("A12"), "A12")
+        self.assertEqual(opslag.excel_nr("1001"), 1001)
+        self.assertEqual(opslag.excel_nr("007"), "007")
+        self.assertEqual(opslag.excel_nr("A12"), "A12")
 
 
 if __name__ == "__main__":

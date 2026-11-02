@@ -259,15 +259,6 @@ python -m unittest discover -s tests -v
 
 Gebruik in tests alleen verzonnen namen.
 
-**Tests verplicht maken.** Dat gebeurt op twee plekken:
-
-1. *Op je eigen computer, voor elke commit.* Eenmalig per computer (of per nieuwe clone):
-   ```
-   git config core.hooksPath .githooks
-   ```
-   Daarna draait `.githooks/pre-commit` de tests bij elke `git commit` en weigert de commit als ze falen. Overslaan kan met `git commit --no-verify`, dus dit is een vangnet, geen slot.
-2. *Op GitHub, voor `main`.* `.github/workflows/tests.yml` draait de tests bij elke push en pull request. Maak ze verplicht via **Settings > Rules > Rulesets > New branch ruleset**: target `main`, zet **Require a pull request before merging** en **Require status checks to pass** aan, en voeg de check `tests` toe. Daarna kan er alleen nog via een pull request met geslaagde tests iets op `main` komen.
-
 Test daarna ook met de hand, met een **verzonnen** ledenlijst en een aparte opslagmap (kies die bij Instellingen > Opslag en ledenlijst), zodat je de echte gegevens niet aanraakt. Loop minimaal langs: aanmelden, +1/-1/verwijderen, drankje toevoegen en boeken, prijs wijzigen, beide exports openen in Excel, Nieuwe maaltijd en Nieuwe soos.
 
 ## Wijzigingen

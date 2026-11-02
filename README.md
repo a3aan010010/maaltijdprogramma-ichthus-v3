@@ -5,10 +5,10 @@ Programma voor Ichthus Utrecht om aanmeldingen voor de maaltijd en het drankverb
 | | |
 |---|---|
 | **Gemaakt door** | Adriaan Abrahamse |
-| **Datum** | 30 oktober 2026 |
-| **Versie** | 1.0 |
+| **Datum** | 2 november 2026 |
+| **Versie** | 1.1 |
 | **Taal** | Python 3, alleen standaard libraries |
-| **Bestand** | `maaltijd.py` |
+| **Starten** | `maaltijd.py` (de onderdelen staan in de map `maaltijd_app`) |
 | **Licentie** | Apache 2.0 (zie `LICENSE`) |
 
 Gebouwd met hulp van Claude Code (Anthropic).
@@ -44,12 +44,12 @@ Gebouwd met hulp van Claude Code (Anthropic).
 ## Installeren en starten
 
 1. Installeer Python 3.8 of nieuwer van [python.org](https://www.python.org/downloads/). Vink bij de installatie op Windows **"Add Python to PATH"** aan. Verder is er niets nodig; ook Excel hoeft niet op de computer te staan.
-2. Zet `maaltijd.py` in een eigen map.
+2. Zet `maaltijd.py`, de map `maaltijd_app` en de logobestanden samen in een eigen map. `maaltijd_app` moet altijd naast `maaltijd.py` staan, anders start het programma niet.
 3. Start het programma:
    - dubbelklik op `maaltijd.py`, of
    - open een opdrachtprompt in die map en typ `python maaltijd.py`.
 
-Het programma opent schermvullend. Voor een gewoon venster:
+Het programma opent schermvullend. De versie staat in de titelbalk. Voor een gewoon venster:
 
 ```
 python maaltijd.py --venster
@@ -144,7 +144,7 @@ Naast `maaltijd.py`:
 | `ichthus-logo-gray-navbar.png` | Het logo in de navbar (216x40, al op maat). |
 | `ichthus-logo-gray.png` | Het grote logo. Wordt gebruikt als de navbar-versie ontbreekt. |
 
-Kopieer je het programma naar een andere computer, neem de logobestanden dan mee. Zonder logo werkt alles ook; dan staat er "Ichthus Utrecht" als tekst in de navbar.
+Kopieer je het programma naar een andere computer, neem dan `maaltijd.py`, de map `maaltijd_app` en de logobestanden mee. Zonder logo werkt alles ook; dan staat er "Ichthus Utrecht" als tekst in de navbar.
 
 In de opslagmap (standaard `maaltijd_data`):
 
@@ -198,19 +198,31 @@ De soosrekeningen van alle leden staan bewust alleen op de pagina Totalen, niet 
 
 ## Voor ontwikkelaars
 
-Alles staat in `maaltijd.py`, met uitgebreide uitleg in de code zelf. Lees eerst het blok bovenaan het bestand.
+`maaltijd.py` start alleen het programma. Alle onderdelen staan in de map `maaltijd_app`, met uitgebreide uitleg in de code zelf. Lees eerst het blok bovenaan `maaltijd.py` en daarna `maaltijd_app/__init__.py`.
 
-### Opbouw van het bestand
+### Opbouw
 
-| Sectie | Inhoud |
+| Bestand in `maaltijd_app` | Inhoud |
 |---|---|
-| 1. Instellingen | `DEFAULT_CONFIG`, `load_config`, `save_config`, `StoreError` |
-| 2. Excel | `read_xlsx_rows` en `write_xlsx`: zelfgebouwd met `zipfile` en XML |
-| 3. Leden | `Member`, `load_members`, `find_members` |
-| 4. Hulpjes | datum (`today_str`, `parse_datum`) en geld (`parse_prijs`, `euro`) |
-| 5. Opslag | `FileLock`, `JsonStore`, het gegevensformaat, `auto_datum` |
-| 6. App | hoofdvenster, export, archief, `show_page`, de decorator `@guarded` |
-| 7. Schermen | `MemberPicker`, `BasePage`, `DatumField`, de pagina's en `Navbar` |
+| `__init__.py` | Het versienummer (`__version__`) en een overzicht van de bestanden |
+| `instellingen.py` | `APP_DIR`, `DEFAULT_CONFIG`, `load_config`, `save_config`, `StoreError` |
+| `excel.py` | `read_xlsx_rows` en `write_xlsx`: zelfgebouwd met `zipfile` en XML |
+| `leden.py` | `Member`, `load_members`, `find_members` |
+| `hulpjes.py` | datum (`today_str`, `parse_datum`) en geld (`parse_prijs`, `euro`) |
+| `opslag.py` | `FileLock`, `JsonStore`, het gegevensformaat, `auto_datum` |
+| `app.py` | hoofdvenster, export, archief, `show_page`, foutlog |
+| `dialogen.py` | `ModalDialog`, `YesNoDialog`, `NewListDialog`, de decorator `@guarded` |
+| `bouwstenen.py` | `setup_style`, `MemberPicker`, `BasePage`, `DatumField` |
+| `paginas.py` | de pagina's: Maaltijd, Soos, Drankjes, Totalen, Instellingen |
+| `navbar.py` | de balk bovenin |
+
+De bestanden van `instellingen.py` tot en met `opslag.py` gebruiken geen tkinter en nooit iets uit de schermbestanden. Houd dat zo: dan blijven ze zonder scherm te testen.
+
+### Een nieuwe versie uitbrengen
+
+1. Zet het nieuwe nummer in `maaltijd_app/__init__.py` (`__version__`).
+2. Werk het blok bovenaan `maaltijd.py`, de tabel bovenaan deze README, de tabel [Wijzigingen](#wijzigingen) en `SECURITY.md` bij.
+3. Commit en zet er een tag op, bijvoorbeeld `git tag -a v1.2 -m "Versie 1.2"`, en push met `git push --follow-tags`.
 
 ### Belangrijkste afspraken
 
@@ -224,9 +236,9 @@ Alles staat in `maaltijd.py`, met uitgebreide uitleg in de code zelf. Lees eerst
 
 ### Een nieuwe pagina toevoegen
 
-1. Maak een klasse die erft van `BasePage` en schrijf een `refresh()` die de gegevens leest en het scherm bijwerkt.
+1. Maak in `paginas.py` een klasse die erft van `BasePage` en schrijf een `refresh()` die de gegevens leest en het scherm bijwerkt.
 2. Roep aan het eind van `__init__` `self.refresh()` en `self.start_polling()` aan.
-3. Voeg de pagina toe in `App.build()` aan `self.pages`.
+3. Voeg de pagina toe in `App.build()` (`app.py`) aan `self.pages`.
 4. Maak een knop in `Navbar.__init__` (met `_add_button`) of een item in `Navbar.SETTINGS_MENU`. Zet hem ook in `Navbar.GROUP`, zodat de juiste knop blauw kleurt.
 
 ### Een nieuwe instelling toevoegen
@@ -235,7 +247,7 @@ Zet hem met een standaardwaarde in `DEFAULT_CONFIG`. Bestaande `maaltijd_config.
 
 ### Een veld toevoegen aan maaltijd.json of soos.json
 
-Voeg het toe in `meal_default()` of `soos_default()` en werk de beschrijving van het gegevensformaat bij (sectie 5). Bestaande bestanden missen het veld nog; gebruik `data.get("veld", standaard)` of vul het aan in een upgrade-functie zoals `auto_datum`.
+Voeg het toe in `meal_default()` of `soos_default()` en werk de beschrijving van het gegevensformaat bij (in `opslag.py`). Bestaande bestanden missen het veld nog; gebruik `data.get("veld", standaard)` of vul het aan in een upgrade-functie zoals `auto_datum`.
 
 ### Testen
 
@@ -262,4 +274,5 @@ Test daarna ook met de hand, met een **verzonnen** ledenlijst en een aparte opsl
 
 | Versie | Datum | Wijziging |
 |---|---|---|
+| 1.1 | 02-11-2026 | Code opgesplitst in de map `maaltijd_app`. Tests in `tests/`, verplicht te maken met een pre-commit hook en GitHub Actions. Onverwachte fouten in `maaltijd_fout.log`. Opslaan is bestand tegen stroomstoringen (`fsync`). Het scherm wacht maximaal 3 seconden op een bezet slot (was 10). Een pagina blijft verversen na een fout, en alleen de zichtbare pagina leest de bestanden. Versie in de titelbalk. Minder dubbele code. |
 | 1.0 | 30-10-2026 | Eerste versie: maaltijd, soos, drankjes, totalen, instellingen, Excel-export en archief. |

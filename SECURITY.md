@@ -11,10 +11,9 @@ Alleen versie 1.1 ontvangt beveiligingsupdates. Oudere versies worden niet onder
 
 ## Melden van kwetsbaarheid.
 
-Meld beveiligingslekken via een van de volgende adressen:
+Meld beveiligingslekken via het volgende adres:
 
-1. webcie@ichthusutrecht.nl
-2. website.esquire038@passmail.net
+- website.esquire038@passmail.net
 
 Voeg zoveel mogelijk details toe, zoals een beschrijving van het lek, stappen om het te reproduceren en de mogelijke impact. Maak het lek niet openbaar voordat het is opgelost.
 

@@ -8,10 +8,13 @@ Draaien vanuit de map van het programma:
 Alle namen hieronder zijn verzonnen. Gebruik in tests nooit echte leden.
 """
 
+import json
 import os
+import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 # Zorgt dat "import maaltijd_app" werkt, ook als de tests vanuit een andere map starten.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -62,6 +65,36 @@ class TestDatum(unittest.TestCase):
         data = {"datum": "01-01-2000", "datum_handmatig": True}
         opslag.auto_datum(data)
         self.assertEqual(data["datum"], "01-01-2000")
+
+    def test_auto_datum_blijft_staan_zodra_er_iets_op_de_lijst_staat(self):
+        meal = {"datum": "04-11-2026", "datum_handmatig": False, "aanmeldingen": {"1001": {"naam": "Anna de Vries", "aantal": 1}}}
+        opslag.auto_datum(meal)
+        self.assertEqual(meal["datum"], "04-11-2026")
+
+        soos = {"datum": "04-11-2026", "datum_handmatig": False, "verbruik": {"1001": {"naam": "Anna de Vries", "drank": {"1": 2}}}}
+        opslag.auto_datum(soos)
+        self.assertEqual(soos["datum"], "04-11-2026")
+
+        # Alles terug naar 0 geboekt telt als leeg: dan volgt de datum weer vandaag.
+        leeg = {"datum": "04-11-2026", "datum_handmatig": False, "verbruik": {"1001": {"naam": "Anna de Vries", "drank": {}}}}
+        opslag.auto_datum(leeg)
+        self.assertEqual(leeg["datum"], hulpjes.today_str())
+
+    def test_soos_na_middernacht_houdt_de_datum_van_de_avond(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = opslag.JsonStore(os.path.join(tmp, "soos.json"), opslag.soos_default, opslag.auto_datum)
+            vandaag = {"datum": "04-11-2026"}
+            with mock.patch.object(opslag, "today_str", lambda: vandaag["datum"]):
+                self.assertEqual(store.read()["datum"], "04-11-2026")
+                store.update(lambda d: d["verbruik"].setdefault("1001", {"naam": "Anna de Vries", "drank": {"1": 1}}))
+                vandaag["datum"] = "05-11-2026"  # middernacht
+                self.assertEqual(store.read()["datum"], "04-11-2026")
+                store.update(lambda d: d["verbruik"]["1001"]["drank"].update({"1": 2}))
+                self.assertEqual(store.read()["datum"], "04-11-2026")
+                # De knop Vandaag zet de datum bewust op de nieuwe dag.
+                store.update(opslag.set_auto_datum())
+                self.assertEqual(store.read()["datum"], "05-11-2026")
+                self.assertFalse(store.read()["datum_handmatig"])
 
 
 class TestExcel(unittest.TestCase):
@@ -166,12 +199,57 @@ class TestOpslag(unittest.TestCase):
             self.store.update(kapot)
         self.assertFalse(os.path.exists(self.path + ".lock"))
 
-    def test_kapot_bestand_wordt_apart_gezet(self):
+    def test_update_schrijft_ook_een_reservekopie(self):
+        self.store.update(lambda data: data["drankjes"].append({"id": 1, "naam": "Bier", "cent": 150}))
+        with open(self.path + ".reserve", encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["drankjes"], [{"id": 1, "naam": "Bier", "cent": 150}])
+
+    def test_kapot_bestand_wordt_hersteld_uit_reservekopie(self):
+        self.store.update(lambda data: data["drankjes"].append({"id": 1, "naam": "Bier", "cent": 150}))
         with open(self.path, "w") as f:
-            f.write("{dit is geen json")
-        self.assertEqual(self.store.read()["drankjes"], [])
+            f.write("")  # leeg, zoals na een stroomstoring
+        with self.assertRaises(instellingen.StoreError) as fout:
+            self.store.read()
+        self.assertIn("hersteld", str(fout.exception))
+        # Daarna is alles terug, en het kapotte bestand is bewaard.
+        self.assertEqual(self.store.read()["drankjes"], [{"id": 1, "naam": "Bier", "cent": 150}])
         kapot = [n for n in os.listdir(self.tmp.name) if n.startswith("soos.json.kapot-")]
         self.assertEqual(len(kapot), 1)
+
+    def test_kapot_bestand_zonder_reservekopie_stopt_het_opslaan(self):
+        for inhoud in ("{dit is geen json", "[]", ""):
+            with self.subTest(inhoud=inhoud):
+                with open(self.path, "w") as f:
+                    f.write(inhoud)
+                with self.assertRaises(instellingen.StoreError):
+                    self.store.read()
+                # Een klik mag het kapotte bestand niet stil vervangen door lege gegevens.
+                with self.assertRaises(instellingen.StoreError):
+                    self.store.update(lambda data: data["drankjes"].append({"id": 1, "naam": "Bier", "cent": 150}))
+                with open(self.path) as f:
+                    self.assertEqual(f.read(), inhoud)
+
+    def test_opslaan_probeert_opnieuw_als_het_bestand_even_bezet_is(self):
+        echt = os.replace
+        pogingen = []
+
+        def soms_bezet(bron, doel):
+            pogingen.append(doel)
+            if len(pogingen) <= 2:
+                raise PermissionError("bezet door een ander programma")
+            echt(bron, doel)
+
+        with mock.patch.object(opslag.os, "replace", soms_bezet), mock.patch.object(opslag, "REPLACE_WAIT", 0):
+            self.store.update(lambda data: data["drankjes"].append({"id": 1, "naam": "Bier", "cent": 150}))
+        self.assertEqual(self.store.read()["drankjes"], [{"id": 1, "naam": "Bier", "cent": 150}])
+
+    def test_opslaan_geeft_nette_fout_als_het_bestand_bezet_blijft(self):
+        def altijd_bezet(bron, doel):
+            raise PermissionError("bezet door een ander programma")
+
+        with mock.patch.object(opslag.os, "replace", altijd_bezet), mock.patch.object(opslag, "REPLACE_WAIT", 0):
+            with self.assertRaises(instellingen.StoreError):
+                self.store.update(lambda data: data["drankjes"].append({"id": 1, "naam": "Bier", "cent": 150}))
 
     def test_bezet_slot_geeft_nette_fout(self):
         open(self.path + ".lock", "w").close()  # een vers slot van "een ander scherm"
@@ -191,6 +269,70 @@ class TestOpslag(unittest.TestCase):
         self.assertEqual(opslag.excel_nr("1001"), 1001)
         self.assertEqual(opslag.excel_nr("007"), "007")
         self.assertEqual(opslag.excel_nr("A12"), "A12")
+
+    def test_nieuwe_soos_begint_met_drankjes_uit_startbestand(self):
+        start = os.path.join(self.tmp.name, "soos_standaard.json")
+        with open(start, "w", encoding="utf-8") as f:
+            json.dump({"drankjes": [{"id": 3, "naam": "Bier", "cent": 150}], "volgende_id": 2, "verbruik": {}}, f)
+        store = opslag.JsonStore(self.path, lambda: opslag.soos_default(start), opslag.auto_datum)
+        data = store.read()
+        self.assertEqual(data["drankjes"], [{"id": 3, "naam": "Bier", "cent": 150}])
+        self.assertEqual(data["volgende_id"], 4)  # nooit een bestaand id hergebruiken
+        self.assertEqual(data["verbruik"], {})
+        # Daarna verandert alleen soos.json, het startbestand niet.
+        store.update(lambda d: d["drankjes"].append({"id": 4, "naam": "Fris", "cent": 125}))
+        with open(start, encoding="utf-8") as f:
+            self.assertEqual(len(json.load(f)["drankjes"]), 1)
+
+    def test_kapot_of_ontbrekend_startbestand_geeft_lege_drankenlijst(self):
+        start = os.path.join(self.tmp.name, "soos_standaard.json")
+        self.assertEqual(opslag.soos_default(start)["drankjes"], [])
+        with open(start, "w", encoding="utf-8") as f:
+            f.write("{kapot")
+        self.assertEqual(opslag.soos_default(start)["drankjes"], [])
+
+    def test_soos_standaard_bevat_alleen_drankjes(self):
+        # Het startbestand staat in git: er mogen nooit boekingen (met namen van leden) in.
+        with open(instellingen.SOOS_START_PATH, encoding="utf-8") as f:
+            start = json.load(f)
+        self.assertLessEqual(set(start), {"drankjes", "volgende_id", "verbruik"})
+        self.assertFalse(start.get("verbruik"))
+        ids = [d["id"] for d in start["drankjes"]]
+        self.assertTrue(ids)
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertLess(max(ids), start["volgende_id"])
+        for d in start["drankjes"]:
+            self.assertIsInstance(d["cent"], int)
+
+    def test_export_overschrijft_nooit_een_andere_lijst(self):
+        map_ = self.tmp.name
+
+        def naam(datum, eigen=None):
+            return os.path.basename(opslag.export_path(map_, "Soos", datum, eigen))
+
+        self.assertEqual(naam("04-11-2026"), "Soos 04-11-2026.xlsx")
+        open(os.path.join(map_, "Soos 04-11-2026.xlsx"), "w").close()
+        # Dezelfde lijst nog een keer exporteren: eigen bestand vervangen.
+        self.assertEqual(naam("04-11-2026", "Soos 04-11-2026.xlsx"), "Soos 04-11-2026.xlsx")
+        # Een andere lijst met dezelfde datum: nieuw bestand ernaast.
+        self.assertEqual(naam("04-11-2026"), "Soos 04-11-2026 (2).xlsx")
+        open(os.path.join(map_, "Soos 04-11-2026 (2).xlsx"), "w").close()
+        self.assertEqual(naam("04-11-2026", "Soos 04-11-2026 (2).xlsx"), "Soos 04-11-2026 (2).xlsx")
+        self.assertEqual(naam("04-11-2026"), "Soos 04-11-2026 (3).xlsx")
+        # Is de datum intussen gewijzigd, dan telt de oude naam niet meer als eigen bestand.
+        self.assertEqual(naam("05-11-2026", "Soos 04-11-2026.xlsx"), "Soos 05-11-2026.xlsx")
+
+
+class TestIcoon(unittest.TestCase):
+    def test_visje_is_een_geldig_icoon_met_kleine_maten(self):
+        # Het .ico-bestand naast maaltijd.py (zie App.ICON_FILE). Kopje: 0, 1, aantal
+        # plaatjes; daarna per plaatje 16 bytes, met als eerste byte de breedte (0 = 256).
+        with open(os.path.join(instellingen.APP_DIR, "ichthus-visje.ico"), "rb") as f:
+            data = f.read()
+        reserved, kind, count = struct.unpack("<HHH", data[:6])
+        self.assertEqual((reserved, kind), (0, 1))
+        sizes = {data[6 + 16 * i] or 256 for i in range(count)}
+        self.assertTrue({16, 32, 48} <= sizes, sizes)
 
 
 if __name__ == "__main__":

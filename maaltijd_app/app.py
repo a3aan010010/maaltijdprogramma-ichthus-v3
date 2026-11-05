@@ -2,9 +2,9 @@
 6. App: het hoofdvenster en de logica die niet bij een enkele pagina hoort (export, archief).
 """
 
+import ctypes
 import datetime
 import os
-import re
 import shutil
 import sys
 import tkinter as tk
@@ -14,10 +14,10 @@ from tkinter import messagebox
 from . import __version__
 from .excel import STYLE_BOLD, STYLE_BOLD_MONEY, STYLE_MONEY, write_xlsx
 from .hulpjes import euro, today_str
-from .instellingen import LOG_PATH, StoreError, load_config
+from .instellingen import APP_DIR, LOG_PATH, SOOS_START_PATH, StoreError, load_config
 from .leden import load_members
 from .navbar import Navbar
-from .opslag import JsonStore, auto_datum, excel_nr, meal_default, member_total_cents, soos_default
+from .opslag import JsonStore, auto_datum, excel_nr, export_path, meal_default, member_total_cents, soos_default
 from .paginas import DrinksPage, MaaltijdPage, SettingsPage, SoosPage, TotalsPage
 
 
@@ -36,9 +36,15 @@ class App:
         App()  ->  setup_style()  ->  App.build()  ->  mainloop()
     """
 
+    # Het Ichthus-visje, naast maaltijd.py. Een .ico bevat het visje in alle maten
+    # (16 tot 256 pixels); Windows kiest zelf de scherpste voor titelbalk en taakbalk.
+    ICON_FILE = "ichthus-visje.ico"
+
     def __init__(self):
+        self._own_taskbar_button()  # moet voor het venster bestaat
         self.root = tk.Tk()
         self.root.title(f"Maaltijd en soos {__version__}")
+        self._apply_icon()
         self.root.minsize(900, 600)
         # Elke fout in een knop of timer komt hier terecht in plaats van stil in de console.
         self.root.report_callback_exception = self._unexpected_error
@@ -49,6 +55,29 @@ class App:
         self.navbar = None
         self.pages = {}  # naam -> pagina; alle pagina's leven in hetzelfde venster
         self.reload_members()
+
+    @staticmethod
+    def _own_taskbar_button():
+        """
+        Het programma draait als python.exe, dus Windows toont in de taakbalk anders
+        het Python-icoon. Met een eigen AppUserModelID krijgt het venster een eigen
+        taakbalkknop, met het visje erop.
+        """
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("IchthusUtrecht.MaaltijdEnSoos")
+        except (AttributeError, OSError):
+            pass  # geen Windows: niets te doen
+
+    def _apply_icon(self):
+        """
+        Het visje linksboven in het venster in plaats van de tkinter-veer.
+        default=: geldt ook voor de vraagvensters (Ja/Nee, Nieuwe soos).
+        Ontbreekt het bestand, of is het geen Windows, dan blijft het standaardicoon.
+        """
+        try:
+            self.root.iconbitmap(default=os.path.join(APP_DIR, self.ICON_FILE))
+        except tk.TclError:
+            pass
 
     def _apply_window_size(self):
         """
@@ -126,8 +155,9 @@ class App:
         return JsonStore(os.path.join(self.data_dir, "maaltijd.json"), meal_default, auto_datum)
 
     def soos_store(self):
-        """Opslag van de soos en de drankjes (soos.json)."""
-        return JsonStore(os.path.join(self.data_dir, "soos.json"), soos_default, auto_datum)
+        """Opslag van de soos en de drankjes (soos.json). Nog geen soos.json? Dan
+        beginnen de drankjes met die uit soos_standaard.json (zie soos_default)."""
+        return JsonStore(os.path.join(self.data_dir, "soos.json"), lambda: soos_default(SOOS_START_PATH), auto_datum)
 
     def reload_members(self):
         """Leest het ledenbestand opnieuw in. Bij een fout blijven de oude leden staan."""
@@ -140,21 +170,27 @@ class App:
 
     # -- export --
     # De exports bouwen een lijst van rijen op (zie write_xlsx) en schrijven die
-    # weg in de opslagmap. Een bestaand bestand met dezelfde naam wordt
-    # overschreven: zo kun je tijdens de avond gerust vaker exporteren.
+    # weg in de opslagmap. De vorige export van dezelfde lijst wordt vervangen
+    # (zo kun je tijdens de avond gerust vaker exporteren), die van een andere
+    # lijst nooit (zie export_path in opslag.py).
 
-    def _export_path(self, prefix, datum):
-        """Pad van een exportbestand, zonder tekens die Windows niet toestaat in de naam."""
+    def _export_path(self, prefix, data):
+        """Pad van het exportbestand voor deze lijst."""
         try:
             os.makedirs(self.data_dir, exist_ok=True)
         except OSError as e:
             raise StoreError(f"De opslagmap kon niet worden aangemaakt: {e}")
-        safe = re.sub(r'[<>:"/\\|?*]', "-", datum)
-        return os.path.join(self.data_dir, f"{prefix} {safe}.xlsx")
+        return export_path(self.data_dir, prefix, data["datum"], data.get("export_bestand"))
+
+    @staticmethod
+    def _remember_export(store, path):
+        """Onthoudt in de gegevens welk bestand de export van deze lijst is."""
+        store.update(lambda data: data.__setitem__("export_bestand", os.path.basename(path)))
 
     def export_meal(self):
         """Schrijft 'Maaltijd <datum>.xlsx' met de aanmeldlijst. Geeft het pad terug."""
-        meal = self.meal_store().read()
+        store = self.meal_store()
+        meal = store.read()
         datum = meal["datum"]
         # Indeling: rij 1 titel, rij 2 leeg, rij 3 kopjes, dan een rij per lid,
         # een lege rij en tot slot de totaalregel.
@@ -164,13 +200,15 @@ class App:
             rows.append([excel_nr(nr), e["naam"], e["aantal"], e.get("tijd", "")])
             total += e["aantal"]
         rows += [[], [("Totaal", STYLE_BOLD), "", (total, STYLE_BOLD)]]
-        path = self._export_path("Maaltijd", datum)
+        path = self._export_path("Maaltijd", meal)
         write_xlsx(path, [("Maaltijd", rows)])
+        self._remember_export(store, path)
         return path
 
     def export_soos(self):
         """Schrijft 'Soos <datum>.xlsx' met de rekeningen, een kolom per drankje."""
-        soos = self.soos_store().read()
+        store = self.soos_store()
+        soos = store.read()
         datum = soos["datum"]
         drinks = soos["drankjes"]
         # Kopjes: Lidnummer, Naam, dan een kolom per drankje (met prijs), dan Totaal.
@@ -191,8 +229,9 @@ class App:
                 + [(cents / 100, STYLE_MONEY)]  # Excel wil euro's, wij rekenen in centen
             )
         rows += [[], [("Totaal", STYLE_BOLD), ""] + [(c, STYLE_BOLD) for c in column_sums] + [(grand / 100, STYLE_BOLD_MONEY)]]
-        path = self._export_path("Soos", datum)
+        path = self._export_path("Soos", soos)
         write_xlsx(path, [("Soos", rows)])
+        self._remember_export(store, path)
         return path
 
     def _archive(self, store, prefix, datum):
@@ -217,7 +256,12 @@ class App:
         """Bewaart de aanmeldlijst in het archief en begint een lege maaltijd. De soos blijft ongemoeid."""
         store = self.meal_store()
         folder = self._archive(store, "Maaltijd", store.read()["datum"])
-        store.update(lambda data: data.update(meal_default()))
+
+        def reset(data):
+            data.clear()  # ook export_bestand weg: de volgende export hoort bij een nieuwe lijst
+            data.update(meal_default())
+
+        store.update(reset)
         return folder
 
     def archive_and_reset_soos(self):
@@ -229,6 +273,7 @@ class App:
             data["verbruik"] = {}  # de drankjes zelf blijven bestaan
             data["datum"] = today_str()
             data["datum_handmatig"] = False
+            data.pop("export_bestand", None)  # de volgende export hoort bij een nieuwe soos
 
         store.update(reset)
         return folder

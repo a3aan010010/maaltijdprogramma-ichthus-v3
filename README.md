@@ -5,8 +5,8 @@ Programma voor Ichthus Utrecht om aanmeldingen voor de maaltijd en het drankverb
 | | |
 |---|---|
 | **Gemaakt door** | Adriaan Abrahamse |
-| **Datum** | 2 november 2026 |
-| **Versie** | 1.1 |
+| **Datum** | 5 november 2026 |
+| **Versie** | 1.2 |
 | **Taal** | Python 3, alleen standaard libraries |
 | **Starten** | `maaltijd.py` (de onderdelen staan in de map `maaltijd_app`) |
 | **Licentie** | Apache 2.0 (zie `LICENSE`) |
@@ -38,13 +38,13 @@ Gebouwd met hulp van Claude Code (Anthropic).
 - **Totalen:** overzicht van de avond (aantal eters en alle soosrekeningen), op een aparte pagina zodat niet iedereen aan de bar alles ziet.
 - **Excel-export:** twee losse bestanden, `Maaltijd <datum>.xlsx` en `Soos <datum>.xlsx`.
 - **Archief:** bij "Nieuwe maaltijd" of "Nieuwe soos" wordt vanzelf (zonder melding) een kopie van de gegevens bewaard. Daarnaast wordt standaard een Excel gemaakt; dat kun je in het bevestigingsvenster uitzetten met het vinkje "Excel aanmaken".
-- **Datum:** standaard automatisch vandaag, en los aan te passen.
+- **Datum:** standaard automatisch: vandaag, en vanaf de eerste aanmelding of boeking ligt hij vast (ook als de avond na middernacht doorloopt). Los aan te passen.
 - **Tegelijk werken:** maaltijd en soos kunnen tegelijk gebruikt worden, ook op meerdere computers.
 
 ## Installeren en starten
 
 1. Installeer Python 3.8 of nieuwer van [python.org](https://www.python.org/downloads/). Vink bij de installatie op Windows **"Add Python to PATH"** aan. Verder is er niets nodig; ook Excel hoeft niet op de computer te staan.
-2. Zet `maaltijd.py`, de map `maaltijd_app` en de logobestanden samen in een eigen map. `maaltijd_app` moet altijd naast `maaltijd.py` staan, anders start het programma niet.
+2. Zet `maaltijd.py`, de map `maaltijd_app`, de logobestanden, `ichthus-visje.ico` en `soos_standaard.json` samen in een eigen map. `maaltijd_app` moet altijd naast `maaltijd.py` staan, anders start het programma niet.
 3. Start het programma:
    - dubbelklik op `maaltijd.py`, of
    - open een opdrachtprompt in die map en typ `python maaltijd.py`.
@@ -90,7 +90,7 @@ Bovenin staat de balk met **Maaltijd**, **Soos** en **Instellingen**. Instelling
 
 In de lijst rechts: selecteer een naam en gebruik **+1**, **-1** of **Verwijderen**.
 
-- **Exporteer lijst naar Excel:** maakt of vervangt `Maaltijd <datum>.xlsx`.
+- **Exporteer lijst naar Excel:** maakt `Maaltijd <datum>.xlsx`, of vervangt de vorige export van deze lijst. Een export van een andere lijst met dezelfde datum wordt nooit overschreven; dan komt er `Maaltijd <datum> (2).xlsx` naast.
 - **Nieuwe maaltijd:** bewaart stil een kopie in het archief en maakt de lijst leeg. De soos blijft staan. In het bevestigingsvenster staat het vinkje **Excel aanmaken** standaard aan: dan wordt eerst `Maaltijd <datum>.xlsx` gemaakt (lukt dat niet, dan wordt er niets gewist). Zet je het vinkje uit, dan blijft het bij de back-up.
 
 ### Soos
@@ -110,7 +110,7 @@ Zolang er geen lid gekozen is, zijn de knoppen grijs. Min is ook grijs bij 0, wa
 
 Je ziet alleen de rekening van het gekozen lid.
 
-- **Exporteer lijst naar Excel:** maakt of vervangt `Soos <datum>.xlsx`.
+- **Exporteer lijst naar Excel:** maakt `Soos <datum>.xlsx`, of vervangt de vorige export van deze soos. Net als bij de maaltijd wordt de export van een andere soos nooit overschreven (dan `Soos <datum> (2).xlsx`).
 - **Nieuwe soos:** bewaart stil een kopie in het archief en maakt de rekeningen leeg. De drankjes en de maaltijd blijven staan. Ook hier staat het vinkje **Excel aanmaken** standaard aan: dan wordt eerst `Soos <datum>.xlsx` gemaakt. Zet je het uit, dan blijft het bij de back-up.
 
 ### Instellingen > Drankjes en prijzen
@@ -127,11 +127,10 @@ Toont het aantal aangemelde eters en alle soosrekeningen met het totaalbedrag.
 
 Maaltijd en soos hebben elk een eigen datumveld.
 
-- Standaard is de datum **automatisch vandaag**.
-- Typ een andere datum (`dd-mm-jjjj`) en klik **Datum opslaan** om hem vast te zetten.
-- **Vandaag** zet hem terug op automatisch. "Nieuwe maaltijd" en "Nieuwe soos" doen dat ook.
-
-Tip: loopt een avond door na middernacht, sla de datum dan eenmalig op, anders krijgt een export na middernacht de datum van de nieuwe dag.
+- Standaard is de datum **automatisch**: zolang de lijst leeg is, is het vandaag. Bij de eerste aanmelding of boeking ligt de datum vast. Loopt de avond door na middernacht, dan houden de lijst, de export en het archief dus gewoon de datum van de avond.
+- Staat er na een paar dagen nog een oude datum ("automatisch: de dag waarop deze lijst begon"), dan is "Nieuwe maaltijd" of "Nieuwe soos" vergeten.
+- Typ een andere datum (`dd-mm-jjjj`) en klik **Datum opslaan** om hem zelf in te stellen.
+- **Vandaag** zet de datum op vandaag en weer op automatisch. "Nieuwe maaltijd" en "Nieuwe soos" maken de lijst leeg; daarna volgt de datum weer vandaag.
 
 ## Bestanden en opslag
 
@@ -143,8 +142,10 @@ Naast `maaltijd.py`:
 | `maaltijd_fout.log` | Details van onverwachte fouten. Ontstaat pas bij de eerste fout; handig om mee te sturen als je hulp vraagt. |
 | `ichthus-logo-gray-navbar.png` | Het logo in de navbar (216x40, al op maat). |
 | `ichthus-logo-gray.png` | Het grote logo. Wordt gebruikt als de navbar-versie ontbreekt. |
+| `ichthus-visje.ico` | Het visje linksboven in het venster en op de taakbalkknop, in alle maten van 16 tot 256 pixels. |
+| `soos_standaard.json` | De vaste drankjes en prijzen waarmee een nieuwe installatie begint. Wordt alleen gelezen zolang er nog geen `soos.json` in de opslagmap staat; daarna past het programma alleen `soos.json` aan. Hierin staan nooit boekingen. |
 
-Kopieer je het programma naar een andere computer, neem dan `maaltijd.py`, de map `maaltijd_app` en de logobestanden mee. Zonder logo werkt alles ook; dan staat er "Ichthus Utrecht" als tekst in de navbar.
+Kopieer je het programma naar een andere computer, neem dan `maaltijd.py`, de map `maaltijd_app`, de logobestanden, `ichthus-visje.ico` en `soos_standaard.json` mee. Zonder logo werkt alles ook; dan staat er "Ichthus Utrecht" als tekst in de navbar, en zonder visje het standaardicoon van tkinter.
 
 In de opslagmap (standaard `maaltijd_data`):
 
@@ -153,12 +154,14 @@ In de opslagmap (standaard `maaltijd_data`):
 | `leden.xlsx` | Het ledenbestand (als je geen ander kiest). |
 | `maaltijd.json` | De huidige maaltijd. |
 | `soos.json` | De drankjes en de huidige soosrekeningen. |
-| `Maaltijd <datum>.xlsx` | Export van de maaltijd. |
-| `Soos <datum>.xlsx` | Export van de soos. |
+| `maaltijd.json.reserve`, `soos.json.reserve` | Reservekopie met dezelfde inhoud. Wordt gebruikt als het echte bestand beschadigd raakt. |
+| `*.kapot-...` | Een beschadigd gegevensbestand, bewaard na herstel uit de reservekopie. Mag weg als alles klopt. |
+| `Maaltijd <datum>.xlsx` | Export van de maaltijd (`(2)`, `(3)` als er meer lijsten met die datum zijn). |
+| `Soos <datum>.xlsx` | Export van de soos (idem). |
 | `archief\` | Een kopie van de gegevens bij elke "Nieuwe maaltijd" en "Nieuwe soos". |
 | `*.lock` | Tijdelijk slotbestand tijdens het opslaan. Verdwijnt vanzelf. |
 
-Elke klik wordt meteen opgeslagen. Het programma afsluiten of een stroomstoring kost dus geen gegevens.
+Elke klik wordt meteen opgeslagen, met een reservekopie ernaast. Het programma afsluiten of een stroomstoring kost dus geen gegevens.
 
 **Een archief terugzetten:** sluit het programma, kopieer `maaltijd.json` of `soos.json` uit de archiefmap terug naar de opslagmap en start het programma weer.
 
@@ -181,7 +184,9 @@ Synchronisatiediensten zoals OneDrive of Dropbox zijn minder geschikt: die kunne
 | "Het bestand ... is geopend in Excel" | Sluit het exportbestand in Excel en klik nog eens op exporteren. |
 | "De gegevens zijn bezig bij een ander scherm" | Even wachten en opnieuw proberen. Blijft het, controleer dan of de netwerkmap bereikbaar is. |
 | Iemand staat niet in de zoeklijst | Staat die persoon in het ledenbestand? Klik daarna op Instellingen > Opslag en ledenlijst > Ledenlijst opnieuw inlezen. |
-| Een bestand `maaltijd.json.kapot-...` | Het gegevensbestand was beschadigd en is apart gezet; het programma is schoon verdergegaan. Kijk in het archief voor de laatste goede versie. |
+| "... was beschadigd en is hersteld uit de reservekopie" | Het programma heeft de reservekopie teruggezet. Controleer de laatste boekingen en doe je laatste klik opnieuw. Het beschadigde bestand staat ernaast als `*.kapot-...`. |
+| "... is beschadigd en er is geen bruikbare reservekopie" | Er wordt niets opgeslagen tot dit is opgelost. Sluit het programma en zet het bestand terug uit `archief\` (zie [Bestanden en opslag](#bestanden-en-opslag)), of verwijder het om leeg te beginnen. |
+| "De gegevens konden niet worden opgeslagen: ... Access is denied" | Een ander programma (virusscanner, back-up, of het programma een tweede keer geopend) hield het bestand langer dan een seconde vast. Sluit een eventueel tweede venster en doe de klik opnieuw. |
 | "Onverwachte fout" | De gegevens zijn veilig. De details staan in `maaltijd_fout.log` naast `maaltijd.py`. |
 | Dubbelklikken op `maaltijd.py` doet niets | Start via de opdrachtprompt met `python maaltijd.py` om de foutmelding te zien. Meestal is Python niet (goed) geïnstalleerd. |
 
@@ -265,5 +270,6 @@ Test daarna ook met de hand, met een **verzonnen** ledenlijst en een aparte opsl
 
 | Versie | Datum | Wijziging |
 |---|---|---|
+| 1.2 | 05-11-2026 | Geen gegevensverlies meer bij een avond die na middernacht doorloopt: de datum ligt vast vanaf de eerste aanmelding of boeking. Een export overschrijft nooit meer de export van een andere lijst. Elke opslag krijgt een reservekopie; een beschadigd bestand wordt daaruit hersteld in plaats van stil leeg verder te gaan. Opslaan probeert het opnieuw als een ander programma het bestand even vasthoudt. Het Ichthus-visje als icoon van het venster en de taakbalkknop, in plaats van de tkinter-veer. Een nieuwe installatie begint met de vaste drankjes en prijzen uit `soos_standaard.json`. |
 | 1.1 | 02-11-2026 | Code opgesplitst in de map `maaltijd_app`. Tests in `tests/`, verplicht te maken met een pre-commit hook en GitHub Actions. Onverwachte fouten in `maaltijd_fout.log`. Opslaan is bestand tegen stroomstoringen (`fsync`). Het scherm wacht maximaal 3 seconden op een bezet slot (was 10). Een pagina blijft verversen na een fout, en alleen de zichtbare pagina leest de bestanden. Versie in de titelbalk. Minder dubbele code. |
 | 1.0 | 30-10-2026 | Eerste versie: maaltijd, soos, drankjes, totalen, instellingen, Excel-export en archief. |

@@ -8,5 +8,7 @@ maaltijd_data/*.json
 maaltijd_data/archief/
 maaltijd_data/*.xlsx
 maaltijd_data/*.lock
+# Reservekopieen, beschadigde bestanden (.kapot-...) en tijdelijke bestanden
+maaltijd_data/*.json.*
 # Local archives
 *.zip

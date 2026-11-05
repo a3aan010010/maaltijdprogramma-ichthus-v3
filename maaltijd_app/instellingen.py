@@ -17,6 +17,9 @@ APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(APP_DIR, "maaltijd_config.json")
 # Onverwachte fouten worden met alle details hierin bijgeschreven (zie App.log_error).
 LOG_PATH = os.path.join(APP_DIR, "maaltijd_fout.log")
+# De drankjes en prijzen waarmee een nieuwe installatie begint (zie soos_default).
+# Staat in git; wordt alleen gelezen zolang er nog geen soos.json in de opslagmap is.
+SOOS_START_PATH = os.path.join(APP_DIR, "soos_standaard.json")
 
 # Standaardinstellingen. Alles wat in maaltijd_config.json staat, overschrijft
 # deze waarden; ontbreekt een sleutel in dat bestand, dan geldt de waarde hier.

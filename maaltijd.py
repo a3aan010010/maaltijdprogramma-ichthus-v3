@@ -4,8 +4,8 @@
 ===============================================================================
 
   Gemaakt door : Adriaan Abrahamse
-  Datum        : 2 november 2026
-  Versie       : 1.1
+  Datum        : 5 november 2026
+  Versie       : 1.2
   Taal         : Python 3 (alleen standaard libraries)
   Licentie     : Apache 2.0 (zie LICENSE)
 
@@ -14,6 +14,12 @@
 
   Wijzigingen
   -----------
+  1.2  (05-11-2026)  Datum ligt vast vanaf de eerste aanmelding of boeking (geen
+                     verspringende datum na middernacht); export overschrijft nooit
+                     een andere lijst; reservekopie bij elke opslag en herstel van
+                     een beschadigd bestand; opslaan probeert opnieuw bij een bezet bestand;
+                     Ichthus-visje als venstericoon (ichthus-visje.ico); een nieuwe
+                     installatie begint met de drankjes uit soos_standaard.json.
   1.1  (02-11-2026)  Opgesplitst in de map maaltijd_app; tests in tests/;
                      foutlog maaltijd_fout.log; fsync bij opslaan; scherm
                      bevriest korter bij een bezet slot; versie in de titel.
@@ -38,8 +44,9 @@ Wat doet het?
   * Export naar Excel in twee losse bestanden: "Maaltijd <datum>.xlsx" (aanmeldlijst)
     en "Soos <datum>.xlsx" (rekeningen). Maaltijd en soos hebben elk hun eigen datum,
     exportknop en "Nieuwe ..." knop en raken elkaar nooit.
-  * Datum: standaard automatisch die van vandaag; los aan te passen, en met de knop
-    "Vandaag" volgt hij weer automatisch.
+  * Datum: standaard automatisch die van vandaag, en vanaf de eerste aanmelding of
+    boeking ligt hij vast (ook na middernacht). Los aan te passen; de knop "Vandaag"
+    zet hem op vandaag en weer op automatisch.
   * Instellingen: de opslagmap en het ledenbestand (Excel) zijn instelbaar.
 
 Opbouw: zie maaltijd_app/__init__.py voor welk bestand wat doet.

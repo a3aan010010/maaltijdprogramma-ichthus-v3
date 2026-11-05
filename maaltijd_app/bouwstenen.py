@@ -12,7 +12,7 @@ from .dialogen import NewListDialog, guarded
 from .hulpjes import parse_datum, today_str
 from .instellingen import LOG_PATH, StoreError
 from .leden import find_members
-from .opslag import set_manual_datum
+from .opslag import set_auto_datum, set_manual_datum
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +270,8 @@ class BasePage(ttk.Frame):
 
 class DatumField(ttk.Frame):
     """
-    Datumveld met knoppen. De datum is standaard automatisch die van vandaag. Sla je een
+    Datumveld met knoppen. De datum is standaard automatisch: vandaag zolang de lijst
+    leeg is, en daarna de dag waarop de lijst begon (ook na middernacht). Sla je een
     eigen datum op, dan blijft die staan tot je op "Vandaag" klikt of een nieuwe
     maaltijd of soos begint. Het automatische deel zit in auto_datum().
 
@@ -297,7 +298,12 @@ class DatumField(ttk.Frame):
         """Toont de datum uit de gegevens, maar overschrijft niets terwijl iemand typt."""
         if self.focus_get() is not self.entry:
             self.var.set(data["datum"])
-        self.info.set("(zelf ingesteld)" if data.get("datum_handmatig") else "(automatisch: vandaag)")
+        if data.get("datum_handmatig"):
+            self.info.set("(zelf ingesteld)")
+        elif data["datum"] == today_str():
+            self.info.set("(automatisch: vandaag)")
+        else:
+            self.info.set("(automatisch: de dag waarop deze lijst begon)")
 
     @guarded
     def save(self):
@@ -314,8 +320,8 @@ class DatumField(ttk.Frame):
 
     @guarded
     def reset(self):
-        """Zet de datum terug op automatisch (vandaag). auto_datum vult hem bij de volgende leesbeurt in."""
-        self.get_store().update(lambda data: data.__setitem__("datum_handmatig", False))
+        """Zet de datum op vandaag en weer op automatisch (zie set_auto_datum)."""
+        self.get_store().update(set_auto_datum())
         self.var.set(today_str())
-        self.message(f"De datum volgt weer automatisch de dag van vandaag ({today_str()}).")
+        self.message(f"De datum is weer automatisch en staat op vandaag ({today_str()}).")
         self.on_change()

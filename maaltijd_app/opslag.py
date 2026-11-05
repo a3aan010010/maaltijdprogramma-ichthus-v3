@@ -2,6 +2,7 @@
 5. Opslag met slot (FileLock, JsonStore) en het gegevensformaat van maaltijd.json en soos.json.
 """
 
+import contextlib
 import json
 import os
 import re
@@ -97,6 +98,8 @@ class JsonStore:
     default_factory : functie die lege gegevens maakt als het bestand nog niet bestaat
     upgrade         : optionele functie die na elke leesbeurt wordt aangeroepen om
                       gegevens aan te vullen of bij te werken (zie auto_datum)
+    on_warning      : optionele functie(tekst) voor een waarschuwing die niets
+                      tegenhoudt: de wijziging is wel gelukt (zie _reserve_failed)
 
     Gebruik:
         data = store.read()                 # alleen lezen, geen slot nodig
@@ -110,9 +113,21 @@ class JsonStore:
     Raakt het echte bestand beschadigd, dan zet _load die reservekopie terug.
     """
 
-    def __init__(self, path, default_factory, upgrade=None):
+    def __init__(self, path, default_factory, upgrade=None, on_warning=None):
         self.path, self.default_factory, self.upgrade = path, default_factory, upgrade
+        self.on_warning = on_warning
         self.reserve_path = path + ".reserve"
+        self._locked = False  # True zolang deze store het slot heeft (zie _lock)
+
+    @contextlib.contextmanager
+    def _lock(self):
+        """Pakt het slot en onthoudt dat we het hebben, zodat _load het niet nog eens probeert."""
+        with FileLock(self.path + ".lock"):
+            self._locked = True
+            try:
+                yield
+            finally:
+                self._locked = False
 
     def read(self):
         """Leest de gegevens. Ontbreekt het bestand, dan komen er lege gegevens terug."""
@@ -132,9 +147,16 @@ class JsonStore:
         except FileNotFoundError:
             return self.default_factory()
         except ValueError:
-            raise self._repair()
+            pass  # beschadigd: hieronder herstellen
         except OSError as e:
             raise StoreError(f"De gegevens konden niet worden gelezen: {e}")
+        if self._locked:
+            raise self._repair()  # update() heeft het slot al
+        # Herstellen gebeurt altijd onder het slot, en daarbinnen lezen we opnieuw:
+        # een ander scherm kan het bestand net hersteld en er alweer iets in
+        # opgeslagen hebben. Een oude reservekopie mag dat niet overschrijven.
+        with self._lock():
+            return self._load()
 
     @staticmethod
     def _read_file(path):
@@ -165,9 +187,7 @@ class JsonStore:
         Is er een bruikbare reservekopie, dan bewaren we het kapotte bestand als
         <bestand>.kapot-<tijd> en zetten we de reservekopie terug. Zo niet, dan
         blijft het kapotte bestand staan en wordt er niets opgeslagen tot iemand
-        het oplost.
-        Let op: dit gebeurt ook bij lezen zonder slot. Met een computer is dat
-        geen probleem; voor meerdere computers moet dit onder het slot.
+        het oplost. Wordt alleen onder het slot aangeroepen (zie _load).
         """
         name = os.path.basename(self.path)
         try:
@@ -205,7 +225,7 @@ class JsonStore:
             os.makedirs(os.path.dirname(self.path), exist_ok=True)
         except OSError as e:
             raise StoreError(f"De opslagmap kon niet worden aangemaakt: {e}")
-        with FileLock(self.path + ".lock"):
+        with self._lock():
             # Binnen het slot opnieuw lezen: een ander scherm kan net iets hebben
             # opgeslagen. Zo bouwen we altijd voort op de nieuwste versie.
             data = self.read()
@@ -216,11 +236,29 @@ class JsonStore:
                 raise StoreError(f"De gegevens konden niet worden opgeslagen: {e}")
             try:
                 self._write_file(self.reserve_path, data)
-            except OSError:
-                # De wijziging zelf staat al veilig op schijf. Een mislukte reservekopie
-                # mag die niet als mislukt laten lijken, anders klikt iemand nog een keer.
-                pass
+            except OSError as e:
+                self._reserve_failed(e)
         return data
+
+    def _reserve_failed(self, error):
+        """
+        De wijziging staat veilig op schijf, maar de reservekopie kon niet worden
+        bijgewerkt. De wijziging geldt als gelukt (anders klikt iemand nog een keer);
+        er komt alleen een waarschuwing via on_warning.
+        De oude reservekopie halen we weg: een later herstel zou anders al opgeslagen
+        wijzigingen stil terugdraaien. Lukt ook dat niet, dan noemt de herstelmelding
+        in elk geval de tijd van de reservekopie.
+        """
+        try:
+            os.remove(self.reserve_path)
+        except OSError:
+            pass
+        if self.on_warning:
+            name = os.path.basename(self.path)
+            self.on_warning(
+                f"De wijziging is opgeslagen, maar de reservekopie van {name} kon niet worden bijgewerkt:\n{error}\n\n"
+                "Controleer of de opslagmap bereikbaar is en niet vol staat."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -283,9 +321,11 @@ def soos_default(start_path=None):
             with open(start_path, encoding="utf-8") as f:
                 start = json.load(f)
             drinks = [{"id": int(d["id"]), "naam": str(d["naam"]), "cent": int(d["cent"])} for d in start["drankjes"]]
-            data["drankjes"] = drinks
             # Nooit een id hergebruiken, ook niet als volgende_id in het startbestand te laag is.
-            data["volgende_id"] = max([int(start.get("volgende_id", 1))] + [d["id"] + 1 for d in drinks])
+            # Eerst alles uitrekenen en pas daarna invullen: gaat er iets mis, dan blijven
+            # de lege standaardgegevens heel (en nooit drankjes met teller 1).
+            next_id = max([int(start.get("volgende_id", 1))] + [d["id"] + 1 for d in drinks])
+            data["drankjes"], data["volgende_id"] = drinks, next_id
         except (OSError, ValueError, KeyError, TypeError):
             pass  # zonder bruikbaar startbestand: lege drankenlijst
     return data

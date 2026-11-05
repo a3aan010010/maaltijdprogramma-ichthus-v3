@@ -158,7 +158,10 @@ class BasePage(ttk.Frame):
 
     Een kindklasse moet:
       * refresh() maken: gegevens lezen en het scherm bijwerken
-      * aan het eind van __init__ self.refresh() en self.start_polling() aanroepen
+      * aan het eind van __init__ self.start_polling() aanroepen, maar NIET zelf
+        self.refresh(): de eerste keer lezen gebeurt in on_show, als de pagina in
+        beeld komt. Daar wordt een StoreError (bijvoorbeeld een beschadigd bestand)
+        netjes als melding getoond; in __init__ zou die het opstarten afbreken.
     En mag:
       * focus_main() maken: waar de cursor staat als de pagina in beeld komt
       * self.message(tekst, error=True/False) gebruiken voor de statusregel

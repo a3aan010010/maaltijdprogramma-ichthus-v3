@@ -216,6 +216,47 @@ class TestOpslag(unittest.TestCase):
         kapot = [n for n in os.listdir(self.tmp.name) if n.startswith("soos.json.kapot-")]
         self.assertEqual(len(kapot), 1)
 
+    def test_herstel_onder_slot_overschrijft_geen_nieuwere_versie(self):
+        # Scherm A ziet een kapot bestand. Terwijl A op het slot wacht, herstelt een
+        # ander scherm het en slaat er een boeking in op. A mag die nieuwere versie
+        # dan niet overschrijven met de (oudere) reservekopie.
+        self.store.update(lambda data: data["drankjes"].append({"id": 1, "naam": "Bier", "cent": 150}))
+        with open(self.path, "w") as f:
+            f.write("")
+        nieuwer = dict(self.store.default_factory(), drankjes=[{"id": 1, "naam": "Bier", "cent": 150}, {"id": 2, "naam": "Fris", "cent": 125}])
+        echt_enter = opslag.FileLock.__enter__
+
+        def ander_scherm_was_eerst(lock):
+            if os.path.getsize(self.path) == 0:
+                with open(self.path, "w", encoding="utf-8") as f:
+                    json.dump(nieuwer, f)
+            return echt_enter(lock)
+
+        with mock.patch.object(opslag.FileLock, "__enter__", ander_scherm_was_eerst):
+            data = self.store.read()
+        self.assertEqual([d["naam"] for d in data["drankjes"]], ["Bier", "Fris"])
+        self.assertEqual([n for n in os.listdir(self.tmp.name) if ".kapot-" in n], [])
+
+    def test_mislukte_reservekopie_geeft_waarschuwing_maar_opslaan_lukt(self):
+        meldingen = []
+        store = opslag.JsonStore(self.path, opslag.soos_default, opslag.auto_datum, meldingen.append)
+        store.update(lambda data: data["drankjes"].append({"id": 1, "naam": "Bier", "cent": 150}))
+        self.assertTrue(os.path.exists(self.path + ".reserve"))
+        echt_schrijven = opslag.JsonStore._write_file
+
+        def reserve_lukt_niet(path, data):
+            if path.endswith(".reserve"):
+                raise OSError("schijf vol")
+            echt_schrijven(path, data)
+
+        with mock.patch.object(opslag.JsonStore, "_write_file", staticmethod(reserve_lukt_niet)):
+            store.update(lambda data: data["drankjes"].append({"id": 2, "naam": "Fris", "cent": 125}))
+        self.assertEqual(len(store.read()["drankjes"]), 2)  # de wijziging zelf is opgeslagen
+        self.assertEqual(len(meldingen), 1)
+        self.assertIn("reservekopie", meldingen[0])
+        # De verouderde reservekopie is weg, zodat een herstel niets kan terugdraaien.
+        self.assertFalse(os.path.exists(self.path + ".reserve"))
+
     def test_kapot_bestand_zonder_reservekopie_stopt_het_opslaan(self):
         for inhoud in ("{dit is geen json", "[]", ""):
             with self.subTest(inhoud=inhoud):
@@ -290,6 +331,12 @@ class TestOpslag(unittest.TestCase):
         with open(start, "w", encoding="utf-8") as f:
             f.write("{kapot")
         self.assertEqual(opslag.soos_default(start)["drankjes"], [])
+        # Geldige drankjes maar een ongeldige teller: liever leeg dan drankjes met teller 1,
+        # want dan zouden nieuwe drankjes bestaande ids hergebruiken.
+        with open(start, "w", encoding="utf-8") as f:
+            json.dump({"drankjes": [{"id": 5, "naam": "Bier", "cent": 150}], "volgende_id": None}, f)
+        data = opslag.soos_default(start)
+        self.assertEqual((data["drankjes"], data["volgende_id"]), ([], 1))
 
     def test_soos_standaard_bevat_alleen_drankjes(self):
         # Het startbestand staat in git: er mogen nooit boekingen (met namen van leden) in.

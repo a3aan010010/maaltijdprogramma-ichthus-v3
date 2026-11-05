@@ -119,8 +119,12 @@ class NewListDialog(ModalDialog):
         ttk.Checkbutton(self.frame, text="Excel aanmaken", variable=self.make_excel).pack(anchor="w", pady=(14, 14))
         buttons = ttk.Frame(self.frame)
         buttons.pack(anchor="e")
-        ttk.Button(buttons, text="Annuleren", command=self.destroy).pack(side="right", padx=(6, 0))
-        ttk.Button(buttons, text=ok_text, style="Big.TButton", command=self._ok).pack(side="right")
+        # Beide knoppen even groot: dezelfde stijl, en uniform maakt de twee kolommen
+        # even breed (zo breed als de langste tekst). Annuleren mag niet kleiner ogen
+        # dan doorgaan, anders lijkt doorgaan de enige keuze.
+        buttons.columnconfigure((0, 1), uniform="knop")
+        ttk.Button(buttons, text=ok_text, style="Big.TButton", command=self._ok).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        ttk.Button(buttons, text="Annuleren", style="Big.TButton", command=self.destroy).grid(row=0, column=1, sticky="ew", padx=(3, 0))
         self.run()
 
     def _ok(self):

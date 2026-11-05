@@ -4,10 +4,11 @@
 
 | Versie  | Ondersteund        |
 | ------- | ------------------ |
-| 1.1     | :white_check_mark: |
+| 1.2     | :white_check_mark: |
+| 1.1     | :x:                |
 | 1.0     | :x:                |
 
-Alleen versie 1.1 ontvangt beveiligingsupdates. Oudere versies worden niet ondersteund.
+Alleen versie 1.2 ontvangt beveiligingsupdates. Oudere versies worden niet ondersteund.
 
 ## Melden van kwetsbaarheid.
 

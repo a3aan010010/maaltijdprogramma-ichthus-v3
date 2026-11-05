@@ -19,4 +19,4 @@ iets uit een bestand met een hoger nummer:
 1 tot en met 5 gebruiken geen tkinter; die zijn zonder scherm te testen (zie tests/).
 """
 
-__version__ = "1.1"
+__version__ = "1.2"

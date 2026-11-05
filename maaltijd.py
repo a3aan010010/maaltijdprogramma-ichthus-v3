@@ -69,7 +69,8 @@ Hoe het in grote lijnen werkt (voor wie hieraan verder bouwt):
 
 Een nieuwe pagina toevoegen:
   1. Maak in paginas.py een klasse die erft van BasePage en implementeer refresh().
-  2. Roep aan het eind van __init__ self.refresh() en self.start_polling() aan.
+  2. Roep aan het eind van __init__ self.start_polling() aan (niet zelf refresh():
+     de eerste keer lezen gebeurt in on_show, zie BasePage).
   3. Zet hem in App.build() (app.py) in self.pages en maak een knop of menu-item
      in Navbar (en zet hem in Navbar.GROUP, zodat de juiste knop blauw kleurt).
 """

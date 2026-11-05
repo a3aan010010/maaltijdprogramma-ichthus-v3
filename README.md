@@ -242,7 +242,7 @@ De bestanden van `instellingen.py` tot en met `opslag.py` gebruiken geen tkinter
 ### Een nieuwe pagina toevoegen
 
 1. Maak in `paginas.py` een klasse die erft van `BasePage` en schrijf een `refresh()` die de gegevens leest en het scherm bijwerkt.
-2. Roep aan het eind van `__init__` `self.refresh()` en `self.start_polling()` aan.
+2. Roep aan het eind van `__init__` `self.start_polling()` aan. Roep daar niet zelf `self.refresh()` aan: de eerste keer lezen gebeurt in `on_show`, waar een melding over bijvoorbeeld een beschadigd bestand netjes wordt getoond in plaats van het opstarten af te breken.
 3. Voeg de pagina toe in `App.build()` (`app.py`) aan `self.pages`.
 4. Maak een knop in `Navbar.__init__` (met `_add_button`) of een item in `Navbar.SETTINGS_MENU`. Zet hem ook in `Navbar.GROUP`, zodat de juiste knop blauw kleurt.
 

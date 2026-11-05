@@ -71,8 +71,7 @@ class MaaltijdPage(BasePage):
         self.total_var = tk.StringVar()
         ttk.Label(buttons, textvariable=self.total_var, font=("Segoe UI", 13, "bold")).pack(side="right")
 
-        self.refresh()
-        self.start_polling()
+        self.start_polling()  # de eerste keer lezen gebeurt in on_show (zie BasePage)
 
     def focus_main(self):
         self.picker.focus()
@@ -270,8 +269,7 @@ class SoosPage(BasePage):
         self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_wheel))
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
 
-        self.refresh()
-        self.start_polling()
+        self.start_polling()  # de eerste keer lezen gebeurt in on_show (zie BasePage)
 
     def focus_main(self):
         self.picker.focus()
@@ -522,8 +520,7 @@ class DrinksPage(BasePage):
         ttk.Button(edit, text="Prijs wijzigen", command=self.change_price).pack(side="left")
         ttk.Button(edit, text="Drankje verwijderen", command=self.delete_drink).pack(side="right")
 
-        self.refresh()
-        self.start_polling()
+        self.start_polling()  # de eerste keer lezen gebeurt in on_show (zie BasePage)
 
     def focus_main(self):
         self.name_entry.focus_set()
@@ -674,8 +671,7 @@ class TotalsPage(BasePage):
         self.grand_var = tk.StringVar()
         ttk.Label(frame, textvariable=self.grand_var, font=("Segoe UI", 14, "bold")).pack(anchor="e", pady=(8, 0))
 
-        # Geen self.refresh() hier: deze pagina toont pas iets als hij in beeld komt (on_show).
-        self.start_polling()
+        self.start_polling()  # de eerste keer lezen gebeurt in on_show (zie BasePage)
 
     def refresh(self):
         """Leest beide bestanden en toont het aantal eters en alle soosrekeningen."""

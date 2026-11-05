@@ -54,6 +54,7 @@ class App:
         self.members_error = ""  # leeg = ledenlijst in orde, anders de foutmelding
         self.navbar = None
         self.pages = {}  # naam -> pagina; alle pagina's leven in hetzelfde venster
+        self._warned = set()  # waarschuwingen die al getoond zijn (zie _warn_once)
         self.reload_members()
 
     @staticmethod
@@ -152,12 +153,26 @@ class App:
     # wijzen ze na het wijzigen van de opslagmap meteen naar de nieuwe map.
     def meal_store(self):
         """Opslag van de maaltijd (maaltijd.json)."""
-        return JsonStore(os.path.join(self.data_dir, "maaltijd.json"), meal_default, auto_datum)
+        return JsonStore(os.path.join(self.data_dir, "maaltijd.json"), meal_default, auto_datum, self._warn_once)
 
     def soos_store(self):
         """Opslag van de soos en de drankjes (soos.json). Nog geen soos.json? Dan
         beginnen de drankjes met die uit soos_standaard.json (zie soos_default)."""
-        return JsonStore(os.path.join(self.data_dir, "soos.json"), lambda: soos_default(SOOS_START_PATH), auto_datum)
+        return JsonStore(
+            os.path.join(self.data_dir, "soos.json"), lambda: soos_default(SOOS_START_PATH), auto_datum, self._warn_once
+        )
+
+    def _warn_once(self, text):
+        """
+        Waarschuwing die niets tegenhoudt (zie JsonStore.on_warning): de klik is wel
+        gelukt. Het venstertje komt pas na de klik, dus niet terwijl het bestand op
+        slot zit, en dezelfde melding maar een keer per keer opstarten. Zo hoeft
+        niemand aan de bar bij elke klik een venstertje weg te klikken.
+        """
+        if text in self._warned:
+            return
+        self._warned.add(text)
+        self.root.after_idle(lambda: messagebox.showwarning("Let op", text))
 
     def reload_members(self):
         """Leest het ledenbestand opnieuw in. Bij een fout blijven de oude leden staan."""
@@ -182,15 +197,37 @@ class App:
             raise StoreError(f"De opslagmap kon niet worden aangemaakt: {e}")
         return export_path(self.data_dir, prefix, data["datum"], data.get("export_bestand"))
 
-    @staticmethod
-    def _remember_export(store, path):
-        """Onthoudt in de gegevens welk bestand de export van deze lijst is."""
-        store.update(lambda data: data.__setitem__("export_bestand", os.path.basename(path)))
+    def _export(self, store, prefix, make_rows):
+        """
+        Exporteert een lijst en geeft het pad terug. Lezen, het Excel-bestand schrijven
+        en onthouden welk bestand de export van deze lijst is (export_bestand),
+        gebeurt in een keer onder het slot van de lijst. Zo kan een "Nieuwe ..." op een
+        ander scherm er niet tussendoor komen; dan zou de nieuwe lijst de exportnaam
+        van de oude krijgen. Lukt het Excel-bestand niet (bijvoorbeeld open in Excel),
+        dan verandert er niets aan de gegevens.
+        """
+        result = {}
+
+        def export(data):
+            path = self._export_path(prefix, data)
+            write_xlsx(path, [(prefix, make_rows(data))])
+            data["export_bestand"] = os.path.basename(path)
+            result["path"] = path
+
+        store.update(export)
+        return result["path"]
 
     def export_meal(self):
         """Schrijft 'Maaltijd <datum>.xlsx' met de aanmeldlijst. Geeft het pad terug."""
-        store = self.meal_store()
-        meal = store.read()
+        return self._export(self.meal_store(), "Maaltijd", self._meal_rows)
+
+    def export_soos(self):
+        """Schrijft 'Soos <datum>.xlsx' met de rekeningen, een kolom per drankje."""
+        return self._export(self.soos_store(), "Soos", self._soos_rows)
+
+    @staticmethod
+    def _meal_rows(meal):
+        """De rijen voor 'Maaltijd <datum>.xlsx'."""
         datum = meal["datum"]
         # Indeling: rij 1 titel, rij 2 leeg, rij 3 kopjes, dan een rij per lid,
         # een lege rij en tot slot de totaalregel.
@@ -200,15 +237,11 @@ class App:
             rows.append([excel_nr(nr), e["naam"], e["aantal"], e.get("tijd", "")])
             total += e["aantal"]
         rows += [[], [("Totaal", STYLE_BOLD), "", (total, STYLE_BOLD)]]
-        path = self._export_path("Maaltijd", meal)
-        write_xlsx(path, [("Maaltijd", rows)])
-        self._remember_export(store, path)
-        return path
+        return rows
 
-    def export_soos(self):
-        """Schrijft 'Soos <datum>.xlsx' met de rekeningen, een kolom per drankje."""
-        store = self.soos_store()
-        soos = store.read()
+    @staticmethod
+    def _soos_rows(soos):
+        """De rijen voor 'Soos <datum>.xlsx'."""
         datum = soos["datum"]
         drinks = soos["drankjes"]
         # Kopjes: Lidnummer, Naam, dan een kolom per drankje (met prijs), dan Totaal.
@@ -229,10 +262,7 @@ class App:
                 + [(cents / 100, STYLE_MONEY)]  # Excel wil euro's, wij rekenen in centen
             )
         rows += [[], [("Totaal", STYLE_BOLD), ""] + [(c, STYLE_BOLD) for c in column_sums] + [(grand / 100, STYLE_BOLD_MONEY)]]
-        path = self._export_path("Soos", soos)
-        write_xlsx(path, [("Soos", rows)])
-        self._remember_export(store, path)
-        return path
+        return rows
 
     def _archive(self, store, prefix, datum):
         """

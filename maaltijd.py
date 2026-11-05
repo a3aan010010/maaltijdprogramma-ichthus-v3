@@ -18,7 +18,8 @@
                      verspringende datum na middernacht); export overschrijft nooit
                      een andere lijst; reservekopie bij elke opslag en herstel van
                      een beschadigd bestand; opslaan probeert opnieuw bij een bezet bestand;
-                     Ichthus-visje als venstericoon (ichthus-visje.ico).
+                     Ichthus-visje als venstericoon (ichthus-visje.ico); een nieuwe
+                     installatie begint met de drankjes uit soos_standaard.json.
   1.1  (02-11-2026)  Opgesplitst in de map maaltijd_app; tests in tests/;
                      foutlog maaltijd_fout.log; fsync bij opslaan; scherm
                      bevriest korter bij een bezet slot; versie in de titel.

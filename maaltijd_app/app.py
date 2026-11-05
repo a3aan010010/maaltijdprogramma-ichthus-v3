@@ -14,7 +14,7 @@ from tkinter import messagebox
 from . import __version__
 from .excel import STYLE_BOLD, STYLE_BOLD_MONEY, STYLE_MONEY, write_xlsx
 from .hulpjes import euro, today_str
-from .instellingen import APP_DIR, LOG_PATH, StoreError, load_config
+from .instellingen import APP_DIR, LOG_PATH, SOOS_START_PATH, StoreError, load_config
 from .leden import load_members
 from .navbar import Navbar
 from .opslag import JsonStore, auto_datum, excel_nr, export_path, meal_default, member_total_cents, soos_default
@@ -155,8 +155,9 @@ class App:
         return JsonStore(os.path.join(self.data_dir, "maaltijd.json"), meal_default, auto_datum)
 
     def soos_store(self):
-        """Opslag van de soos en de drankjes (soos.json)."""
-        return JsonStore(os.path.join(self.data_dir, "soos.json"), soos_default, auto_datum)
+        """Opslag van de soos en de drankjes (soos.json). Nog geen soos.json? Dan
+        beginnen de drankjes met die uit soos_standaard.json (zie soos_default)."""
+        return JsonStore(os.path.join(self.data_dir, "soos.json"), lambda: soos_default(SOOS_START_PATH), auto_datum)
 
     def reload_members(self):
         """Leest het ledenbestand opnieuw in. Bij een fout blijven de oude leden staan."""

@@ -44,7 +44,7 @@ Gebouwd met hulp van Claude Code (Anthropic).
 ## Installeren en starten
 
 1. Installeer Python 3.8 of nieuwer van [python.org](https://www.python.org/downloads/). Vink bij de installatie op Windows **"Add Python to PATH"** aan. Verder is er niets nodig; ook Excel hoeft niet op de computer te staan.
-2. Zet `maaltijd.py`, de map `maaltijd_app`, de logobestanden en `ichthus-visje.ico` samen in een eigen map. `maaltijd_app` moet altijd naast `maaltijd.py` staan, anders start het programma niet.
+2. Zet `maaltijd.py`, de map `maaltijd_app`, de logobestanden, `ichthus-visje.ico` en `soos_standaard.json` samen in een eigen map. `maaltijd_app` moet altijd naast `maaltijd.py` staan, anders start het programma niet.
 3. Start het programma:
    - dubbelklik op `maaltijd.py`, of
    - open een opdrachtprompt in die map en typ `python maaltijd.py`.
@@ -143,8 +143,9 @@ Naast `maaltijd.py`:
 | `ichthus-logo-gray-navbar.png` | Het logo in de navbar (216x40, al op maat). |
 | `ichthus-logo-gray.png` | Het grote logo. Wordt gebruikt als de navbar-versie ontbreekt. |
 | `ichthus-visje.ico` | Het visje linksboven in het venster en op de taakbalkknop, in alle maten van 16 tot 256 pixels. |
+| `soos_standaard.json` | De vaste drankjes en prijzen waarmee een nieuwe installatie begint. Wordt alleen gelezen zolang er nog geen `soos.json` in de opslagmap staat; daarna past het programma alleen `soos.json` aan. Hierin staan nooit boekingen. |
 
-Kopieer je het programma naar een andere computer, neem dan `maaltijd.py`, de map `maaltijd_app`, de logobestanden en `ichthus-visje.ico` mee. Zonder logo werkt alles ook; dan staat er "Ichthus Utrecht" als tekst in de navbar, en zonder visje het standaardicoon van tkinter.
+Kopieer je het programma naar een andere computer, neem dan `maaltijd.py`, de map `maaltijd_app`, de logobestanden, `ichthus-visje.ico` en `soos_standaard.json` mee. Zonder logo werkt alles ook; dan staat er "Ichthus Utrecht" als tekst in de navbar, en zonder visje het standaardicoon van tkinter.
 
 In de opslagmap (standaard `maaltijd_data`):
 
@@ -269,6 +270,6 @@ Test daarna ook met de hand, met een **verzonnen** ledenlijst en een aparte opsl
 
 | Versie | Datum | Wijziging |
 |---|---|---|
-| 1.2 | 05-11-2026 | Geen gegevensverlies meer bij een avond die na middernacht doorloopt: de datum ligt vast vanaf de eerste aanmelding of boeking. Een export overschrijft nooit meer de export van een andere lijst. Elke opslag krijgt een reservekopie; een beschadigd bestand wordt daaruit hersteld in plaats van stil leeg verder te gaan. Opslaan probeert het opnieuw als een ander programma het bestand even vasthoudt. Het Ichthus-visje als icoon van het venster en de taakbalkknop, in plaats van de tkinter-veer. |
+| 1.2 | 05-11-2026 | Geen gegevensverlies meer bij een avond die na middernacht doorloopt: de datum ligt vast vanaf de eerste aanmelding of boeking. Een export overschrijft nooit meer de export van een andere lijst. Elke opslag krijgt een reservekopie; een beschadigd bestand wordt daaruit hersteld in plaats van stil leeg verder te gaan. Opslaan probeert het opnieuw als een ander programma het bestand even vasthoudt. Het Ichthus-visje als icoon van het venster en de taakbalkknop, in plaats van de tkinter-veer. Een nieuwe installatie begint met de vaste drankjes en prijzen uit `soos_standaard.json`. |
 | 1.1 | 02-11-2026 | Code opgesplitst in de map `maaltijd_app`. Tests in `tests/`, verplicht te maken met een pre-commit hook en GitHub Actions. Onverwachte fouten in `maaltijd_fout.log`. Opslaan is bestand tegen stroomstoringen (`fsync`). Het scherm wacht maximaal 3 seconden op een bezet slot (was 10). Een pagina blijft verversen na een fout, en alleen de zichtbare pagina leest de bestanden. Versie in de titelbalk. Minder dubbele code. |
 | 1.0 | 30-10-2026 | Eerste versie: maaltijd, soos, drankjes, totalen, instellingen, Excel-export en archief. |

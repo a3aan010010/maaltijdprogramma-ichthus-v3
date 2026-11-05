@@ -1,0 +1,76 @@
+{
+ "drankjes": [
+  {
+   "id": 2,
+   "naam": "Fris",
+   "cent": 125
+  },
+  {
+   "id": 3,
+   "naam": "Bier",
+   "cent": 150
+  },
+  {
+   "id": 4,
+   "naam": "Wijn",
+   "cent": 175
+  },
+  {
+   "id": 5,
+   "naam": "Bestuursdrankje",
+   "cent": 350
+  },
+  {
+   "id": 6,
+   "naam": "Speciaalbier",
+   "cent": 250
+  },
+  {
+   "id": 7,
+   "naam": "Radler",
+   "cent": 150
+  },
+  {
+   "id": 8,
+   "naam": "Meter bier",
+   "cent": 1750
+  },
+  {
+   "id": 10,
+   "naam": "Halve meter bier",
+   "cent": 875
+  },
+  {
+   "id": 11,
+   "naam": "Losse snack",
+   "cent": 150
+  },
+  {
+   "id": 12,
+   "naam": "Bittergarnituur",
+   "cent": 200
+  },
+  {
+   "id": 13,
+   "naam": "Shot",
+   "cent": 250
+  },
+  {
+   "id": 14,
+   "naam": "Cocktail van de maand",
+   "cent": 350
+  },
+  {
+   "id": 15,
+   "naam": "Flugel",
+   "cent": 150
+  },
+  {
+   "id": 16,
+   "naam": "Stëlz",
+   "cent": 275
+  }
+ ],
+ "volgende_id": 19,
+ "verbruik": {}
+}

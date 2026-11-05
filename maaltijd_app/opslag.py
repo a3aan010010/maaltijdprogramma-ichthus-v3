@@ -266,11 +266,29 @@ def meal_default():
     return {"datum": today_str(), "datum_handmatig": False, "aanmeldingen": {}}
 
 
-def soos_default():
-    """Lege soosgegevens; zie het gegevensformaat hierboven."""
+def soos_default(start_path=None):
+    """
+    Soosgegevens voor als er nog geen soos.json is; zie het gegevensformaat hierboven.
+
+    start_path: een startbestand met drankjes en prijzen (soos_standaard.json naast
+    maaltijd.py). Zo begint een nieuwe installatie meteen met de vaste drankjes.
+    Daarna wordt alleen soos.json aangepast; het startbestand blijft zoals het is.
+    Ontbreekt het startbestand of klopt het niet, dan begint de soos zonder drankjes.
+    """
     # datum: de datum van de soos (los van de maaltijd)
     # drankjes: lijst van {id, naam, cent}; verbruik: lidnummer -> {naam, drank: {id: aantal}}
-    return {"datum": today_str(), "datum_handmatig": False, "drankjes": [], "volgende_id": 1, "verbruik": {}}
+    data = {"datum": today_str(), "datum_handmatig": False, "drankjes": [], "volgende_id": 1, "verbruik": {}}
+    if start_path:
+        try:
+            with open(start_path, encoding="utf-8") as f:
+                start = json.load(f)
+            drinks = [{"id": int(d["id"]), "naam": str(d["naam"]), "cent": int(d["cent"])} for d in start["drankjes"]]
+            data["drankjes"] = drinks
+            # Nooit een id hergebruiken, ook niet als volgende_id in het startbestand te laag is.
+            data["volgende_id"] = max([int(start.get("volgende_id", 1))] + [d["id"] + 1 for d in drinks])
+        except (OSError, ValueError, KeyError, TypeError):
+            pass  # zonder bruikbaar startbestand: lege drankenlijst
+    return data
 
 
 def has_entries(data):

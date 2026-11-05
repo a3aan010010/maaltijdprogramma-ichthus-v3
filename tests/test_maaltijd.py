@@ -270,6 +270,40 @@ class TestOpslag(unittest.TestCase):
         self.assertEqual(opslag.excel_nr("007"), "007")
         self.assertEqual(opslag.excel_nr("A12"), "A12")
 
+    def test_nieuwe_soos_begint_met_drankjes_uit_startbestand(self):
+        start = os.path.join(self.tmp.name, "soos_standaard.json")
+        with open(start, "w", encoding="utf-8") as f:
+            json.dump({"drankjes": [{"id": 3, "naam": "Bier", "cent": 150}], "volgende_id": 2, "verbruik": {}}, f)
+        store = opslag.JsonStore(self.path, lambda: opslag.soos_default(start), opslag.auto_datum)
+        data = store.read()
+        self.assertEqual(data["drankjes"], [{"id": 3, "naam": "Bier", "cent": 150}])
+        self.assertEqual(data["volgende_id"], 4)  # nooit een bestaand id hergebruiken
+        self.assertEqual(data["verbruik"], {})
+        # Daarna verandert alleen soos.json, het startbestand niet.
+        store.update(lambda d: d["drankjes"].append({"id": 4, "naam": "Fris", "cent": 125}))
+        with open(start, encoding="utf-8") as f:
+            self.assertEqual(len(json.load(f)["drankjes"]), 1)
+
+    def test_kapot_of_ontbrekend_startbestand_geeft_lege_drankenlijst(self):
+        start = os.path.join(self.tmp.name, "soos_standaard.json")
+        self.assertEqual(opslag.soos_default(start)["drankjes"], [])
+        with open(start, "w", encoding="utf-8") as f:
+            f.write("{kapot")
+        self.assertEqual(opslag.soos_default(start)["drankjes"], [])
+
+    def test_soos_standaard_bevat_alleen_drankjes(self):
+        # Het startbestand staat in git: er mogen nooit boekingen (met namen van leden) in.
+        with open(instellingen.SOOS_START_PATH, encoding="utf-8") as f:
+            start = json.load(f)
+        self.assertLessEqual(set(start), {"drankjes", "volgende_id", "verbruik"})
+        self.assertFalse(start.get("verbruik"))
+        ids = [d["id"] for d in start["drankjes"]]
+        self.assertTrue(ids)
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertLess(max(ids), start["volgende_id"])
+        for d in start["drankjes"]:
+            self.assertIsInstance(d["cent"], int)
+
     def test_export_overschrijft_nooit_een_andere_lijst(self):
         map_ = self.tmp.name
 
